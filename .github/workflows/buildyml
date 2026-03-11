@@ -1,4 +1,4 @@
-name: Build APK and Windows EXE
+name: CI — Build Android APK and Windows EXE
 
 on:
   push:
@@ -11,37 +11,51 @@ on:
 
 jobs:
   build_apk:
-    name: Build Android APK
+    name: Build Android APK (regenerate platform files first)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Show Flutter and Java versions
+      - name: Show environment
         run: |
           flutter --version
-          java -version
+          java -version || true
+          uname -a
 
-      - name: Get and upgrade Dart/Flutter packages
+      - name: Upgrade & get packages
         run: |
-          flutter pub upgrade
+          flutter pub upgrade || true
           flutter pub get
 
       - name: Regenerate platform files (non-destructive)
         run: |
-          # regenerate platform files to match the SDK (will not overwrite lib/)
+          # Regenerates android/ and other platform files to match SDK without touching lib/
+          # This updates Gradle/CMake templates so plugin registration uses the declarative plugin block.
           flutter create .
 
+      - name: Show Android project files (diagnostic)
+        run: |
+          echo "android/build.gradle exists: $( [ -f android/build.gradle ] && echo yes || echo no )"
+          echo "android/app/build.gradle exists: $( [ -f android/app/build.gradle ] && echo yes || echo no )"
+          echo "android/settings.gradle exists: $( [ -f android/settings.gradle ] && echo yes || echo no )"
+          ls -la android || true
+
       - name: Accept Android licenses
+        # Accept licenses so android build doesn't block
         run: yes | flutter doctor --android-licenses
 
       - name: Build release APK
         run: flutter build apk --release
+        env:
+          JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF8"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -52,11 +66,13 @@ jobs:
             build/app/outputs/flutter-apk/app.apk
 
   build_windows:
-    name: Build Windows EXE (generate platform files if missing)
+    name: Build Windows EXE (regenerate platform files if missing)
     runs-on: windows-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -66,37 +82,50 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Show Flutter
-        run: flutter --version
-
-      - name: Get and upgrade Dart/Flutter packages
+      - name: Show environment
         run: |
-          flutter pub upgrade
+          flutter --version
+          Get-ChildItem Env:PATH
+
+      - name: Upgrade & get packages
+        run: |
+          flutter pub upgrade || true
           flutter pub get
 
-      - name: Regenerate Windows platform files if missing
+      - name: Ensure Windows platform files exist (regenerate if missing)
         shell: pwsh
         run: |
-          # If windows/runner/CMakeLists.txt or windows/runner doesn't exist, regenerate windows platform
-          if (-not (Test-Path -Path windows\runner\CMakeLists.txt)) {
-            Write-Host "windows/runner/CMakeLists.txt missing — running flutter create --platforms=windows ."
+          $cmake = Test-Path -Path windows\CMakeLists.txt -PathType Leaf
+          $runner = Test-Path -Path windows\runner -PathType Container
+          Write-Host "windows\\CMakeLists.txt exists: $cmake"
+          Write-Host "windows\\runner directory exists: $runner"
+          if (-not ($cmake -and $runner)) {
+            Write-Host "Windows platform files missing or incomplete — running flutter create --platforms=windows ."
             flutter create --platforms=windows .
           } else {
             Write-Host "Windows platform files present"
           }
 
+      - name: Show Windows project files (diagnostic)
+        shell: pwsh
+        run: |
+          Get-ChildItem -Force windows | Select-Object Name,Mode,Length
+
       - name: Build release Windows executable
-        run: flutter build windows --release
+        shell: pwsh
+        run: |
+          flutter build windows --release
 
       - name: Pack Windows build directory (zip)
         shell: pwsh
         run: |
           $out = "windows-build.zip"
-          if (Test-Path -Path build\windows\runner\Release) {
-            Compress-Archive -Path build\windows\runner\Release\* -DestinationPath $out -Force
+          $releasePath = "build\\windows\\runner\\Release"
+          if(Test-Path -Path $releasePath) {
+            Compress-Archive -Path "$releasePath\\*" -DestinationPath $out -Force
             Write-Host "Created $out"
           } else {
-            Write-Host "Windows build output not found: build\\windows\\runner\\Release"
+            Write-Host "Windows build output not found at $releasePath"
             exit 1
           }
 
