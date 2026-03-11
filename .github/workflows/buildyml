@@ -22,16 +22,23 @@ jobs:
         with:
           channel: stable
 
-      - name: Enable Android tooling
+      - name: Show Flutter and Java versions
         run: |
-          flutter doctor
+          flutter --version
+          java -version
+
+      - name: Get and upgrade Dart/Flutter packages
+        run: |
+          flutter pub upgrade
+          flutter pub get
+
+      - name: Regenerate platform files (non-destructive)
+        run: |
+          # regenerate platform files to match the SDK (will not overwrite lib/)
+          flutter create .
 
       - name: Accept Android licenses
-        # Accept licenses so the Android toolchain can build
         run: yes | flutter doctor --android-licenses
-
-      - name: Get dependencies
-        run: flutter pub get
 
       - name: Build release APK
         run: flutter build apk --release
@@ -40,13 +47,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          # Upload both common output names (if present)
           path: |
             build/app/outputs/flutter-apk/app-release.apk
             build/app/outputs/flutter-apk/app.apk
 
   build_windows:
-    name: Build Windows EXE
+    name: Build Windows EXE (generate platform files if missing)
     runs-on: windows-latest
     steps:
       - name: Checkout repo
@@ -60,8 +66,24 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Get dependencies
-        run: flutter pub get
+      - name: Show Flutter
+        run: flutter --version
+
+      - name: Get and upgrade Dart/Flutter packages
+        run: |
+          flutter pub upgrade
+          flutter pub get
+
+      - name: Regenerate Windows platform files if missing
+        shell: pwsh
+        run: |
+          # If windows/runner/CMakeLists.txt or windows/runner doesn't exist, regenerate windows platform
+          if (-not (Test-Path -Path windows\runner\CMakeLists.txt)) {
+            Write-Host "windows/runner/CMakeLists.txt missing — running flutter create --platforms=windows ."
+            flutter create --platforms=windows .
+          } else {
+            Write-Host "Windows platform files present"
+          }
 
       - name: Build release Windows executable
         run: flutter build windows --release
@@ -70,11 +92,11 @@ jobs:
         shell: pwsh
         run: |
           $out = "windows-build.zip"
-          if(Test-Path -Path build/windows/runner/Release) {
-            Compress-Archive -Path build/windows/runner/Release/* -DestinationPath $out -Force
+          if (Test-Path -Path build\windows\runner\Release) {
+            Compress-Archive -Path build\windows\runner\Release\* -DestinationPath $out -Force
             Write-Host "Created $out"
           } else {
-            Write-Host "Windows build output not found: build/windows/runner/Release"
+            Write-Host "Windows build output not found: build\\windows\\runner\\Release"
             exit 1
           }
 
