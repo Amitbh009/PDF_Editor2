@@ -1,0 +1,159 @@
+name: Build PDF Editor Pro
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  # Allow manual triggering from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  # Android APK Build Job
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🔍 Verify setup
+        run: flutter doctor -v
+
+      - name: 📱 Build Android APK (debug)
+        run: flutter build apk --debug
+
+      - name: 📱 Build Android APK (release)
+        run: flutter build apk --release --split-per-abi
+
+      - name: 📤 Upload Android APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 30
+
+  # Windows EXE Build Job  
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🔍 Verify setup
+        run: flutter doctor -v
+
+      - name: 🪟 Enable Windows desktop support
+        run: flutter config --enable-windows-desktop
+
+      - name: 🏗️ Build Windows EXE (debug)
+        run: flutter build windows --debug
+
+      - name: 🏗️ Build Windows EXE (release)
+        run: flutter build windows --release
+
+      - name: 📦 Create Windows release package
+        shell: pwsh
+        run: |
+          # Create a zip of the release folder
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath PDF_Editor_Pro_Windows.zip
+
+      - name: 📤 Upload Windows EXE artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            build/windows/x64/runner/Debug/pdf_editor_pro.exe
+            build/windows/x64/runner/Release/
+            PDF_Editor_Pro_Windows.zip
+          retention-days: 30
+
+  # Optional: Create a GitHub Release with the built artifacts
+  create-release:
+    name: Create GitHub Release
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    # Only run on push to main/master
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: 📥 Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 📦 Prepare release assets
+        run: |
+          mkdir release-assets
+          # Copy Android APKs
+          cp -r artifacts/android-apks/* release-assets/ || true
+          # Copy Windows ZIP
+          cp artifacts/windows-exe/PDF_Editor_Pro_Windows.zip release-assets/ || true
+
+      - name: 🏷️ Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }} - ${{ github.sha }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## 📄 PDF Editor Pro - Automated Build
+            
+            This release was automatically built from commit: ${{ github.sha }}
+            
+            ### 📱 Android
+            - debug APK
+            - release APK (with split per ABI)
+            
+            ### 🖥️ Windows
+            - debug EXE
+            - release EXE package
+            
+            ### ⚡ Features
+            - Text editing
+            - Drawing/Freehand
+            - PDF annotations
+            - Signature pad
+            - Merge & split PDFs
+            
+            ### 🔧 Installation
+            **Android**: Download the appropriate APK for your device
+            **Windows**: Extract the ZIP and run pdf_editor_pro.exe
+          files: release-assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
