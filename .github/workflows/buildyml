@@ -1,97 +1,85 @@
-name: Build PDF Editor Pro
+name: Build APK and Windows EXE
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:        # allow manual trigger
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  # ----------------------------------------------
-  # Android build (APK)
-  # ----------------------------------------------
-  build-android:
+  build_apk:
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
+          channel: stable
 
-      - name: Cache Pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
+      - name: Enable Android tooling
+        run: |
+          flutter doctor
+
+      - name: Accept Android licenses
+        # Accept licenses so the Android toolchain can build
+        run: yes | flutter doctor --android-licenses
 
       - name: Get dependencies
         run: flutter pub get
 
-      # Optional: add Syncfusion license from secrets (remove watermark)
-      # Uncomment and set SYNCFUSION_LICENSE_KEY in your repository secrets
-      # - name: Apply Syncfusion license
-      #   if: ${{ secrets.SYNCFUSION_LICENSE_KEY != '' }}
-      #   run: |
-      #     echo "// Auto-generated license file" > lib/syncfusion_license.dart
-      #     echo "import 'package:syncfusion_flutter_core/core.dart';" >> lib/syncfusion_license.dart
-      #     echo "void registerSyncfusionLicense() {" >> lib/syncfusion_license.dart
-      #     echo "  SyncfusionLicense.registerLicense('${{ secrets.SYNCFUSION_LICENSE_KEY }}');" >> lib/syncfusion_license.dart
-      #     echo "}" >> lib/syncfusion_license.dart
-      #     # Then you would need to call registerSyncfusionLicense() in main.dart.
-      #     # This step is left as an example – adjust according to your code.
+      - name: Build release APK
+        run: flutter build apk --release
 
-      - name: Build release APKs (split per ABI)
-        run: flutter build apk --release --split-per-abi
-
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apks
-          path: build/app/outputs/flutter-apk/*.apk
+          name: android-apk
+          # Upload both common output names (if present)
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app.apk
 
-  # ----------------------------------------------
-  # Windows build (EXE)
-  # ----------------------------------------------
-  build-windows:
+  build_windows:
+    name: Build Windows EXE
     runs-on: windows-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
+          channel: stable
 
-      - name: Cache Pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Roaming\Pub\Cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Enable Windows desktop support
+      - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build Windows release EXE
+      - name: Build release Windows executable
         run: flutter build windows --release
 
-      - name: Upload Windows build folder
+      - name: Pack Windows build directory (zip)
+        shell: pwsh
+        run: |
+          $out = "windows-build.zip"
+          if(Test-Path -Path build/windows/runner/Release) {
+            Compress-Archive -Path build/windows/runner/Release/* -DestinationPath $out -Force
+            Write-Host "Created $out"
+          } else {
+            Write-Host "Windows build output not found: build/windows/runner/Release"
+            exit 1
+          }
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release
-          path: build\windows\x64\runner\Release\
+          name: windows-exe
+          path: windows-build.zip
