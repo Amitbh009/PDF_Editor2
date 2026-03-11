@@ -1,300 +1,61 @@
-name: Build PDF Editor Pro
+name: Build PDF Editor
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch: # allow manual trigger from GitHub UI
-
-# ─────────────────────────────────────────────────────────────────────────────
-# REPO STRUCTURE (matches your project):
-#
-#   android/
-#     app/
-#       src/main/
-#         res/xml/
-#         AndroidManifest.xml
-#       build.gradle
-#     build.gradle
-#     gradle.properties
-#     settings.gradle
-#   lib/
-#     screens/
-#     services/
-#     widgets/
-#     main.dart
-#   windows/
-#     CMakeLists.txt
-#   pubspec.yaml
-#   README.md
-#
-# Strategy:
-#   1. Create a blank Flutter scaffold in a temp folder
-#   2. REPLACE scaffold's lib/ and pubspec.yaml with yours
-#   3. REPLACE scaffold's android/ and windows/ with yours
-#      (so your custom Manifest, build.gradle, permissions are used as-is)
-#   4. Build
-# ─────────────────────────────────────────────────────────────────────────────
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:        # allows manual trigger from GitHub UI
 
 jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform: android
+            build_command: flutter build apk --release --split-per-abi
+            artifact_path: build/app/outputs/flutter-apk/*.apk
+            artifact_name: android-apks
+          - os: windows-latest
+            platform: windows
+            build_command: flutter build windows --release
+            artifact_path: build/windows/x64/runner/Release/
+            artifact_name: windows-exe
 
-  # ─── Android APK ─────────────────────────────────────────────────────────────
-  build-android:
-    name: 🤖 Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: ☕ Setup Java (for Android)
+        if: matrix.platform == 'android'
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Flutter 3.22.2
+      - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.2'
-          channel: stable
-          cache: true
+          flutter-version: '3.x'        # use latest stable Flutter 3.x
+          channel: 'stable'
+          cache: true                    # cache Flutter SDK between runs
 
-      - name: Disable analytics
-        run: flutter config --no-analytics
-
-      - name: Create fresh Flutter scaffold
-        run: |
-          flutter create \
-            --org com.pdfeditorpro \
-            --project-name pdf_editor_pro \
-            /tmp/build
-          echo "✅ Scaffold created"
-
-      - name: Replace lib/ with ours
-        run: |
-          rm -rf /tmp/build/lib
-          cp -r lib /tmp/build/lib
-          echo "✅ lib/ copied"
-          ls -la /tmp/build/lib
-
-      - name: Replace pubspec.yaml with ours
-        run: |
-          cp pubspec.yaml /tmp/build/pubspec.yaml
-          echo "✅ pubspec.yaml copied"
-
-      - name: Replace android/ with ours
-        run: |
-          rm -rf /tmp/build/android
-          cp -r android /tmp/build/android
-          echo "✅ android/ copied"
-
-      - name: Patch gradle.properties (add AndroidX + memory)
-        run: |
-          # Ensure these are set even if already present
-          grep -q "android.useAndroidX" /tmp/build/android/gradle.properties \
-            || echo "android.useAndroidX=true" >> /tmp/build/android/gradle.properties
-          grep -q "android.enableJetifier" /tmp/build/android/gradle.properties \
-            || echo "android.enableJetifier=true" >> /tmp/build/android/gradle.properties
-          grep -q "org.gradle.jvmargs" /tmp/build/android/gradle.properties \
-            || echo "org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G" \
-               >> /tmp/build/android/gradle.properties
-          echo "✅ gradle.properties verified"
-          cat /tmp/build/android/gradle.properties
-
-      - name: Patch local.properties with SDK path
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > /tmp/build/android/local.properties
-          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" \
-            >> /tmp/build/android/local.properties
-          echo "✅ local.properties written"
-
-      - name: Install dependencies
+      - name: 📦 Get dependencies
         run: flutter pub get
-        working-directory: /tmp/build
 
-      - name: Flutter doctor
+      - name: 🔍 Run Flutter doctor
         run: flutter doctor -v
 
-      - name: Build APK — split per ABI
-        run: flutter build apk --release --no-tree-shake-icons --split-per-abi
-        working-directory: /tmp/build
+      - name: 🏗️ Build for ${{ matrix.platform }}
+        run: ${{ matrix.build_command }}
 
-      - name: List APK outputs
-        run: ls -lh /tmp/build/build/app/outputs/flutter-apk/
-
-      - name: Upload arm64 APK (modern Android phones)
+      - name: 📤 Upload ${{ matrix.platform }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PDFEditorPro-arm64-APK
-          path: /tmp/build/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          retention-days: 30
-
-      - name: Upload armeabi APK (older phones)
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-armeabi-APK
-          path: /tmp/build/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          retention-days: 30
-
-      - name: Upload x86_64 APK (emulators)
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-x86_64-APK
-          path: /tmp/build/build/app/outputs/flutter-apk/app-x86_64-release.apk
-          retention-days: 30
-
-  # ─── Android App Bundle (Play Store) ─────────────────────────────────────────
-  build-aab:
-    name: 📦 Build Android AAB (Play Store)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Flutter 3.22.2
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.2'
-          channel: stable
-          cache: true
-
-      - name: Disable analytics
-        run: flutter config --no-analytics
-
-      - name: Create fresh Flutter scaffold
-        run: |
-          flutter create \
-            --org com.pdfeditorpro \
-            --project-name pdf_editor_pro \
-            /tmp/build
-
-      - name: Replace lib/, pubspec.yaml, android/
-        run: |
-          rm -rf /tmp/build/lib
-          cp -r lib /tmp/build/lib
-          cp pubspec.yaml /tmp/build/pubspec.yaml
-          rm -rf /tmp/build/android
-          cp -r android /tmp/build/android
-          echo "✅ Source files replaced"
-
-      - name: Patch gradle.properties
-        run: |
-          grep -q "android.useAndroidX" /tmp/build/android/gradle.properties \
-            || echo "android.useAndroidX=true" >> /tmp/build/android/gradle.properties
-          grep -q "android.enableJetifier" /tmp/build/android/gradle.properties \
-            || echo "android.enableJetifier=true" >> /tmp/build/android/gradle.properties
-          grep -q "org.gradle.jvmargs" /tmp/build/android/gradle.properties \
-            || echo "org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G" \
-               >> /tmp/build/android/gradle.properties
-
-      - name: Patch local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > /tmp/build/android/local.properties
-          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" \
-            >> /tmp/build/android/local.properties
-
-      - name: Install dependencies
-        run: flutter pub get
-        working-directory: /tmp/build
-
-      - name: Build App Bundle
-        run: flutter build appbundle --release --no-tree-shake-icons
-        working-directory: /tmp/build
-
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-AAB-PlayStore
-          path: /tmp/build/build/app/outputs/bundle/release/app-release.aab
-          retention-days: 30
-
-  # ─── Windows Desktop EXE ─────────────────────────────────────────────────────
-  build-windows:
-    name: 🖥️ Build Windows Desktop EXE
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter 3.22.2
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.2'
-          channel: stable
-          cache: true
-
-      - name: Enable Windows desktop & disable analytics
-        run: |
-          flutter config --no-analytics
-          flutter config --enable-windows-desktop
-
-      - name: Create fresh Flutter scaffold
-        run: |
-          flutter create `
-            --org com.pdfeditorpro `
-            --project-name pdf_editor_pro `
-            C:\build
-          Write-Host "✅ Scaffold created"
-
-      - name: Replace lib/, pubspec.yaml, windows/
-        shell: pwsh
-        run: |
-          # lib/
-          Remove-Item -Recurse -Force C:\build\lib -ErrorAction SilentlyContinue
-          Copy-Item -Recurse lib C:\build\lib
-
-          # pubspec.yaml
-          Copy-Item pubspec.yaml C:\build\pubspec.yaml
-
-          # windows/ — use our CMakeLists.txt
-          Remove-Item -Recurse -Force C:\build\windows -ErrorAction SilentlyContinue
-          Copy-Item -Recurse windows C:\build\windows
-
-          Write-Host "✅ Files replaced"
-          Get-ChildItem C:\build\lib
-          Get-ChildItem C:\build\windows
-
-      - name: Install dependencies
-        run: flutter pub get
-        working-directory: C:\build
-
-      - name: Flutter doctor
-        run: flutter doctor -v
-
-      - name: Build Windows release
-        run: flutter build windows --release --no-tree-shake-icons
-        working-directory: C:\build
-
-      - name: List output files
-        shell: pwsh
-        run: Get-ChildItem -Recurse C:\build\build\windows\x64\runner\Release\
-
-      - name: Zip Windows output
-        shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path "C:\build\build\windows\x64\runner\Release\*" `
-            -DestinationPath "C:\PDFEditorPro-Windows.zip"
-          Write-Host "✅ Zipped successfully"
-
-      - name: Upload Windows folder (all DLLs + EXE)
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-Windows-EXE-Folder
-          path: C:\build\build\windows\x64\runner\Release\
-          retention-days: 30
-
-      - name: Upload Windows ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-Windows-ZIP
-          path: C:\PDFEditorPro-Windows.zip
-          retention-days: 30
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
