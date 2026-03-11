@@ -12,7 +12,10 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        working-directory: ./flutter_app   # 👈 All commands run inside flutter_app/
+
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -33,9 +36,8 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           flutter pub get
-          # If the above fails, try clearing cache and retry
-          flutter clean
-          flutter pub get
+          # If pub get fails due to version conflicts, try upgrading
+          # flutter pub upgrade
 
       - name: 🔍 Verify setup
         run: flutter doctor -v
@@ -50,19 +52,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apks
-          path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          path: flutter_app/build/app/outputs/flutter-apk/*.apk   # 👈 Path from repo root
           retention-days: 30
 
   # Windows EXE Build Job
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
-    
+    defaults:
+      run:
+        working-directory: ./flutter_app   # 👈 All commands run inside flutter_app/
+
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -77,9 +77,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           flutter pub get
-          # If the above fails, try clearing cache and retry
-          flutter clean
-          flutter pub get
+          # flutter pub upgrade   # uncomment if needed
 
       - name: 🔍 Verify setup
         run: flutter doctor -v
@@ -93,12 +91,11 @@ jobs:
       - name: 🏗️ Build Windows EXE (release)
         run: flutter build windows --release
 
-      - name: 📦 Create Windows release package
+      - name: 📦 Create Windows release package (optional)
         shell: pwsh
         run: |
-          # Create a zip of the release folder (only if release build succeeded)
           if (Test-Path "build\windows\x64\runner\Release") {
-            Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath PDF_Editor_Pro_Windows.zip -Force
+            Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath ..\PDF_Editor_Pro_Windows.zip -Force
           }
 
       - name: 📤 Upload Windows EXE artifacts
@@ -106,12 +103,12 @@ jobs:
         with:
           name: windows-exe
           path: |
-            build/windows/x64/runner/Debug/pdf_editor_pro.exe
-            build/windows/x64/runner/Release/
-            PDF_Editor_Pro_Windows.zip
+            flutter_app/build/windows/x64/runner/Debug/pdf_editor_pro.exe
+            flutter_app/build/windows/x64/runner/Release/
+            PDF_Editor_Pro_Windows.zip    # if created
           retention-days: 30
 
-  # Optional: Create a GitHub Release with the built artifacts
+  # Optional: Create a GitHub Release with all artifacts
   create-release:
     name: Create GitHub Release
     needs: [build-android, build-windows]
@@ -127,14 +124,8 @@ jobs:
       - name: 📦 Prepare release assets
         run: |
           mkdir -p release-assets
-          # Copy Android APKs
-          if [ -d "artifacts/android-apks" ]; then
-            cp -r artifacts/android-apks/* release-assets/ || true
-          fi
-          # Copy Windows ZIP
-          if [ -f "artifacts/windows-exe/PDF_Editor_Pro_Windows.zip" ]; then
-            cp artifacts/windows-exe/PDF_Editor_Pro_Windows.zip release-assets/ || true
-          fi
+          cp -r artifacts/android-apks/* release-assets/ 2>/dev/null || true
+          cp -r artifacts/windows-exe/* release-assets/ 2>/dev/null || true
 
       - name: 🏷️ Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -146,20 +137,12 @@ jobs:
             
             This release was automatically built from commit: ${{ github.sha }}
             
-            ### 📱 Android
-            - Debug APK
-            - Release APK (split by architecture)
+            ### 📱 Android APKs
+            - Debug & Release (split by architecture)
             
-            ### 🖥️ Windows
-            - Debug EXE
-            - Release EXE package
-            
-            ### ✨ Features
-            - Text editing
-            - Drawing/Freehand
-            - PDF annotations
-            - Signature pad
-            - Merge & split PDFs
+            ### 🖥️ Windows EXE
+            - Debug executable
+            - Release folder (or ZIP)
           files: release-assets/*
           draft: false
           prerelease: false
