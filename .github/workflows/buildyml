@@ -1,61 +1,97 @@
-name: Build PDF Editor
+name: Build PDF Editor Pro
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:        # allows manual trigger from GitHub UI
+    branches: [ main, master ]
+  workflow_dispatch:        # allow manual trigger
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        include:
-          - os: ubuntu-latest
-            platform: android
-            build_command: flutter build apk --release --split-per-abi
-            artifact_path: build/app/outputs/flutter-apk/*.apk
-            artifact_name: android-apks
-          - os: windows-latest
-            platform: windows
-            build_command: flutter build windows --release
-            artifact_path: build/windows/x64/runner/Release/
-            artifact_name: windows-exe
-
-    runs-on: ${{ matrix.os }}
-
+  # ----------------------------------------------
+  # Android build (APK)
+  # ----------------------------------------------
+  build-android:
+    runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java (for Android)
-        if: matrix.platform == 'android'
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 🐦 Setup Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'        # use latest stable Flutter 3.x
+          flutter-version: '3.x'
           channel: 'stable'
-          cache: true                    # cache Flutter SDK between runs
+          cache: true
 
-      - name: 📦 Get dependencies
+      - name: Cache Pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Get dependencies
         run: flutter pub get
 
-      - name: 🔍 Run Flutter doctor
-        run: flutter doctor -v
+      # Optional: add Syncfusion license from secrets (remove watermark)
+      # Uncomment and set SYNCFUSION_LICENSE_KEY in your repository secrets
+      # - name: Apply Syncfusion license
+      #   if: ${{ secrets.SYNCFUSION_LICENSE_KEY != '' }}
+      #   run: |
+      #     echo "// Auto-generated license file" > lib/syncfusion_license.dart
+      #     echo "import 'package:syncfusion_flutter_core/core.dart';" >> lib/syncfusion_license.dart
+      #     echo "void registerSyncfusionLicense() {" >> lib/syncfusion_license.dart
+      #     echo "  SyncfusionLicense.registerLicense('${{ secrets.SYNCFUSION_LICENSE_KEY }}');" >> lib/syncfusion_license.dart
+      #     echo "}" >> lib/syncfusion_license.dart
+      #     # Then you would need to call registerSyncfusionLicense() in main.dart.
+      #     # This step is left as an example – adjust according to your code.
 
-      - name: 🏗️ Build for ${{ matrix.platform }}
-        run: ${{ matrix.build_command }}
+      - name: Build release APKs (split per ABI)
+        run: flutter build apk --release --split-per-abi
 
-      - name: 📤 Upload ${{ matrix.platform }} artifacts
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: android-apks
+          path: build/app/outputs/flutter-apk/*.apk
+
+  # ----------------------------------------------
+  # Windows build (EXE)
+  # ----------------------------------------------
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Cache Pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Roaming\Pub\Cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Enable Windows desktop support
+        run: flutter config --enable-windows-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows release EXE
+        run: flutter build windows --release
+
+      - name: Upload Windows build folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: build\windows\x64\runner\Release\
