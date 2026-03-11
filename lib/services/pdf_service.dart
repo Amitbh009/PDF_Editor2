@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' show Rect; // use dart:ui Rect — NOT sf.Rect
+// FIX: import dart:ui with a prefix to avoid Offset/Rect conflict with
+// package:flutter/material.dart which also exports Offset.
+// We only need Rect from dart:ui (for Syncfusion bounds parameters).
+import 'dart:ui' as ui show Rect;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,6 +26,7 @@ class PdfService {
         withData: true,
       );
       if (result == null || result.files.isEmpty) return null;
+
       final file  = result.files.first;
       final bytes = file.bytes ?? await File(file.path!).readAsBytes();
 
@@ -59,7 +63,7 @@ class PdfService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // EXPORT  — flatten all annotations into the PDF bytes
+  // EXPORT — flatten all annotations into the PDF bytes
   // ─────────────────────────────────────────────────────────────────────────
 
   static Future<Uint8List?> exportPdf(PdfState state) async {
@@ -73,8 +77,7 @@ class PdfService {
         final page     = document.pages[ann.pageIndex];
         final graphics = page.graphics;
 
-        // FIX: PdfFontStyle is a proper enum in v25.x — no bitmask '|' operator.
-        // Use `multiStyle` list parameter for bold+italic combination.
+        // PdfFontStyle is a proper enum in v25.x — use multiStyle list for bold+italic
         final sf.PdfFont font;
         if (ann.isBold && ann.isItalic) {
           font = sf.PdfStandardFont(
@@ -107,12 +110,12 @@ class PdfService {
           ann.color.blue,
         ));
 
-        // FIX: bounds takes dart:ui Rect — sf.Rect does not exist in v25.x
+        // Use ui.Rect (dart:ui) — sf.Rect does not exist in v25.x
         graphics.drawString(
           ann.content,
           font,
           brush: brush,
-          bounds: Rect.fromLTWH(
+          bounds: ui.Rect.fromLTWH(
             ann.position.dx,
             ann.position.dy,
             300,
@@ -139,7 +142,7 @@ class PdfService {
         final points = draw.points;
         for (int i = 0; i < points.length - 1; i++) {
           if (points[i] != null && points[i + 1] != null) {
-            // FIX: drawLine takes flutter Offset — sf.Offset does not exist in v25.x
+            // Offset is from flutter/material.dart — no prefix needed
             graphics.drawLine(
               pen,
               Offset(points[i]!.dx,     points[i]!.dy),
@@ -157,10 +160,10 @@ class PdfService {
         final imageBytes = await File(img.imagePath).readAsBytes();
         final pdfImage   = sf.PdfBitmap(imageBytes);
 
-        // FIX: drawImage takes dart:ui Rect — sf.Rect does not exist in v25.x
+        // Use ui.Rect (dart:ui) — sf.Rect does not exist in v25.x
         graphics.drawImage(
           pdfImage,
-          Rect.fromLTWH(
+          ui.Rect.fromLTWH(
             img.position.dx,
             img.position.dy,
             img.width,
@@ -197,9 +200,9 @@ class PdfService {
         savePath = '${dir.path}/$name';
       } else if (Platform.isWindows) {
         final result = await FilePicker.platform.saveFile(
-          dialogTitle   : 'Save PDF',
-          fileName      : state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ?? 'edited.pdf',
-          type          : FileType.custom,
+          dialogTitle      : 'Save PDF',
+          fileName         : state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ?? 'edited.pdf',
+          type             : FileType.custom,
           allowedExtensions: ['pdf'],
         );
         savePath = result;
@@ -242,8 +245,8 @@ class PdfService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // MERGE
-  // FIX: PdfDocumentImporter was removed in Syncfusion v25.x
-  //      Use page.createTemplate() + graphics.drawPdfTemplate() instead
+  // PdfDocumentImporter removed in v25.x — use createTemplate + drawPdfTemplate
+  // PdfPage.size is read-only — pass PdfPageSettings to pages.add()
   // ─────────────────────────────────────────────────────────────────────────
 
   static Future<Uint8List?> mergePdfs(List<String> paths) async {
@@ -255,19 +258,12 @@ class PdfService {
         final src      = sf.PdfDocument(inputBytes: srcBytes);
 
         for (int i = 0; i < src.pages.count; i++) {
-          final srcPage = src.pages[i];
-
-          // FIX: PdfPage.size is read-only in v25.x — pass size via
-          // PdfPageSettings at add() time instead of setting it after.
+          final srcPage  = src.pages[i];
           final settings = sf.PdfPageSettings(srcPage.size);
           final newPage  = merged.pages.add(settings: settings);
 
-          // Stamp the source page content onto the new page
           final template = srcPage.createTemplate();
-          newPage.graphics.drawPdfTemplate(
-            template,
-            const Offset(0, 0),
-          );
+          newPage.graphics.drawPdfTemplate(template, Offset.zero);
         }
         src.dispose();
       }
@@ -283,7 +279,7 @@ class PdfService {
 
   // ─────────────────────────────────────────────────────────────────────────
   // SPLIT
-  // FIX: same — createTemplate + drawPdfTemplate replaces PdfDocumentImporter
+  // Same fix — createTemplate + drawPdfTemplate, PdfPageSettings for size
   // ─────────────────────────────────────────────────────────────────────────
 
   static Future<List<Uint8List>?> splitPdf(
@@ -295,19 +291,13 @@ class PdfService {
       for (final pageIdx in pageIndices) {
         if (pageIdx >= doc.pages.count) continue;
 
-        final srcPage = doc.pages[pageIdx];
-        final newDoc  = sf.PdfDocument();
-
-        // FIX: PdfPage.size is read-only in v25.x — pass size via
-        // PdfPageSettings at add() time instead of setting it after.
+        final srcPage  = doc.pages[pageIdx];
+        final newDoc   = sf.PdfDocument();
         final settings = sf.PdfPageSettings(srcPage.size);
         final newPage  = newDoc.pages.add(settings: settings);
 
         final template = srcPage.createTemplate();
-        newPage.graphics.drawPdfTemplate(
-          template,
-          const Offset(0, 0),
-        );
+        newPage.graphics.drawPdfTemplate(template, Offset.zero);
 
         results.add(Uint8List.fromList(await newDoc.save()));
         newDoc.dispose();
