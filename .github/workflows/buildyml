@@ -5,7 +5,6 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  # Allow manual triggering from GitHub UI
   workflow_dispatch:
 
 jobs:
@@ -32,7 +31,11 @@ jobs:
           cache: true
 
       - name: 📦 Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          # If the above fails, try clearing cache and retry
+          flutter clean
+          flutter pub get
 
       - name: 🔍 Verify setup
         run: flutter doctor -v
@@ -55,7 +58,7 @@ jobs:
             build/app/outputs/flutter-apk/app-x86_64-release.apk
           retention-days: 30
 
-  # Windows EXE Build Job  
+  # Windows EXE Build Job
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
@@ -72,7 +75,11 @@ jobs:
           cache: true
 
       - name: 📦 Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          # If the above fails, try clearing cache and retry
+          flutter clean
+          flutter pub get
 
       - name: 🔍 Verify setup
         run: flutter doctor -v
@@ -89,8 +96,10 @@ jobs:
       - name: 📦 Create Windows release package
         shell: pwsh
         run: |
-          # Create a zip of the release folder
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath PDF_Editor_Pro_Windows.zip
+          # Create a zip of the release folder (only if release build succeeded)
+          if (Test-Path "build\windows\x64\runner\Release") {
+            Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath PDF_Editor_Pro_Windows.zip -Force
+          }
 
       - name: 📤 Upload Windows EXE artifacts
         uses: actions/upload-artifact@v4
@@ -107,7 +116,6 @@ jobs:
     name: Create GitHub Release
     needs: [build-android, build-windows]
     runs-on: ubuntu-latest
-    # Only run on push to main/master
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     
     steps:
@@ -118,11 +126,15 @@ jobs:
 
       - name: 📦 Prepare release assets
         run: |
-          mkdir release-assets
+          mkdir -p release-assets
           # Copy Android APKs
-          cp -r artifacts/android-apks/* release-assets/ || true
+          if [ -d "artifacts/android-apks" ]; then
+            cp -r artifacts/android-apks/* release-assets/ || true
+          fi
           # Copy Windows ZIP
-          cp artifacts/windows-exe/PDF_Editor_Pro_Windows.zip release-assets/ || true
+          if [ -f "artifacts/windows-exe/PDF_Editor_Pro_Windows.zip" ]; then
+            cp artifacts/windows-exe/PDF_Editor_Pro_Windows.zip release-assets/ || true
+          fi
 
       - name: 🏷️ Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -135,23 +147,19 @@ jobs:
             This release was automatically built from commit: ${{ github.sha }}
             
             ### 📱 Android
-            - debug APK
-            - release APK (with split per ABI)
+            - Debug APK
+            - Release APK (split by architecture)
             
             ### 🖥️ Windows
-            - debug EXE
-            - release EXE package
+            - Debug EXE
+            - Release EXE package
             
-            ### ⚡ Features
+            ### ✨ Features
             - Text editing
             - Drawing/Freehand
             - PDF annotations
             - Signature pad
             - Merge & split PDFs
-            
-            ### 🔧 Installation
-            **Android**: Download the appropriate APK for your device
-            **Windows**: Extract the ZIP and run pdf_editor_pro.exe
           files: release-assets/*
           draft: false
           prerelease: false
