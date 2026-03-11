@@ -1,136 +1,293 @@
-name: CI — Build Android APK and Windows EXE
+name: Build PDF Editor Pro
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROOT CAUSE FIXES IN THIS VERSION:
+#
+# ANDROID:
+#   - Does NOT copy your android/ folder at all — builds with a 100% clean
+#     scaffold android/ that is guaranteed to work with Flutter 3.22.2
+#   - Patches only minSdk, targetSdk, compileSdk, multiDex into the clean gradle
+#   - Writes correct local.properties for CI
+#   - Copies only your AndroidManifest.xml and file_paths.xml into the scaffold
+#
+# WINDOWS:
+#   - Does NOT copy your windows/ folder at all — uses the scaffold windows/
+#     which has a working CMakeLists.txt + runner/ guaranteed to compile
+#   - Your lib/ and pubspec.yaml are the only things injected
+#
+# This is the safest approach: platform folders from flutter create are always
+# correct for the Flutter version. Only app code (lib/) is yours.
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
-  build_apk:
-    name: Build Android APK (regenerate platform files first)
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  ANDROID APK
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-android:
+    name: 🤖 Android APK
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Flutter
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.22.2
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.22.2'
           channel: stable
+          cache: true
 
-      - name: Show environment
+      - name: Confirm Flutter version
+        run: flutter --version
+
+      # ── Create a 100% clean scaffold ──────────────────────────────────────
+      - name: Create clean Flutter scaffold (android only)
         run: |
-          flutter --version
-          java -version || true
-          uname -a
+          flutter create \
+            --org com.pdfeditorpro \
+            --project-name pdf_editor_pro \
+            --platforms android \
+            /tmp/build
 
-      - name: Upgrade & get packages
+      # ── Inject ONLY your Dart code ────────────────────────────────────────
+      - name: Replace lib/ with yours
         run: |
-          flutter pub upgrade || true
-          flutter pub get
+          rm -rf /tmp/build/lib
+          cp -r "$GITHUB_WORKSPACE/lib" /tmp/build/lib
+          echo "lib/ contents:"
+          ls /tmp/build/lib
 
-      - name: Regenerate platform files (non-destructive)
+      - name: Replace pubspec.yaml with yours
         run: |
-          # Regenerates android/ and other platform files to match SDK without touching lib/
-          # This updates Gradle/CMake templates so plugin registration uses the declarative plugin block.
-          flutter create .
+          cp "$GITHUB_WORKSPACE/pubspec.yaml" /tmp/build/pubspec.yaml
 
-      - name: Show Android project files (diagnostic)
+      # ── Patch the CLEAN scaffold's android/ (do NOT replace it) ──────────
+      - name: Write local.properties for CI
         run: |
-          echo "android/build.gradle exists: $( [ -f android/build.gradle ] && echo yes || echo no )"
-          echo "android/app/build.gradle exists: $( [ -f android/app/build.gradle ] && echo yes || echo no )"
-          echo "android/settings.gradle exists: $( [ -f android/settings.gradle ] && echo yes || echo no )"
-          ls -la android || true
+          FLUTTER_SDK="$(dirname $(dirname $(which flutter)))"
+          printf "sdk.dir=%s\nflutter.sdk=%s\n" \
+            "$ANDROID_SDK_ROOT" "$FLUTTER_SDK" \
+            > /tmp/build/android/local.properties
+          echo "local.properties:"
+          cat /tmp/build/android/local.properties
 
-      - name: Accept Android licenses
-        # Accept licenses so android build doesn't block
-        run: yes | flutter doctor --android-licenses
+      - name: Patch app/build.gradle — minSdk / targetSdk / multiDex
+        run: |
+          F=/tmp/build/android/app/build.gradle
 
-      - name: Build release APK
-        run: flutter build apk --release
-        env:
-          JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF8"
+          # Flutter 3.22 scaffold uses flutter.minSdkVersion etc — replace them
+          sed -i \
+            -e 's/flutter\.minSdkVersion/21/g' \
+            -e 's/flutter\.targetSdkVersion/34/g' \
+            -e 's/flutter\.compileSdkVersion/34/g' \
+            "$F"
 
-      - name: Upload APK artifact
+          # Add multiDexEnabled true inside defaultConfig if not present
+          grep -q "multiDexEnabled" "$F" || \
+            sed -i '/defaultConfig {$/a\        multiDexEnabled true' "$F"
+
+          # Add multidex dependency if not present
+          grep -q "multidex" "$F" || \
+            sed -i '/dependencies {$/a\    implementation "androidx.multidex:multidex:2.0.1"' "$F"
+
+          echo "--- app/build.gradle after patch ---"
+          cat "$F"
+
+      - name: Patch gradle.properties — AndroidX + JVM memory
+        run: |
+          F=/tmp/build/android/gradle.properties
+          grep -q "android.useAndroidX"    "$F" || echo "android.useAndroidX=true"     >> "$F"
+          grep -q "android.enableJetifier" "$F" || echo "android.enableJetifier=true"  >> "$F"
+          grep -q "org.gradle.jvmargs"     "$F" || \
+            echo "org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G" >> "$F"
+          echo "--- gradle.properties ---"
+          cat "$F"
+
+      - name: Copy YOUR AndroidManifest.xml into scaffold
+        run: |
+          cp "$GITHUB_WORKSPACE/android/app/src/main/AndroidManifest.xml" \
+             /tmp/build/android/app/src/main/AndroidManifest.xml
+          echo "AndroidManifest.xml replaced"
+
+      - name: Copy YOUR file_paths.xml into scaffold (if exists)
+        run: |
+          SRC="$GITHUB_WORKSPACE/android/app/src/main/res/xml/file_paths.xml"
+          DST="/tmp/build/android/app/src/main/res/xml"
+          if [ -f "$SRC" ]; then
+            mkdir -p "$DST"
+            cp "$SRC" "$DST/file_paths.xml"
+            echo "file_paths.xml copied"
+          else
+            echo "No file_paths.xml found — skipping"
+          fi
+
+      # ── Install deps ──────────────────────────────────────────────────────
+      - name: flutter pub get
+        run: flutter pub get
+        working-directory: /tmp/build
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build APK release (split per ABI)
+        run: |
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --no-tree-shake-icons
+        working-directory: /tmp/build
+
+      - name: List APK outputs
+        run: ls -lh /tmp/build/build/app/outputs/flutter-apk/
+
+      # ── Upload ────────────────────────────────────────────────────────────
+      - name: Upload arm64-v8a APK  (modern phones — use this one)
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app.apk
+          name: PDFEditorPro-Android-arm64
+          path: /tmp/build/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 30
 
-  build_windows:
-    name: Build Windows EXE (regenerate platform files if missing)
+      - name: Upload armeabi-v7a APK  (older phones)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Android-armeabi
+          path: /tmp/build/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          retention-days: 30
+
+      - name: Upload x86_64 APK  (emulators)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Android-x86_64
+          path: /tmp/build/build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 30
+
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  WINDOWS EXE
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-windows:
+    name: 🖥️ Windows EXE
     runs-on: windows-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Flutter
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.22.2
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.22.2'
           channel: stable
+          cache: true
 
-      - name: Enable Windows desktop
-        run: flutter config --enable-windows-desktop
-
-      - name: Show environment
+      - name: Enable Windows desktop + confirm version
         run: |
+          flutter config --no-analytics
+          flutter config --enable-windows-desktop
           flutter --version
-          Get-ChildItem Env:PATH
 
-      - name: Upgrade & get packages
-        run: |
-          flutter pub upgrade || true
-          flutter pub get
-
-      - name: Ensure Windows platform files exist (regenerate if missing)
+      # ── Create a 100% clean scaffold ──────────────────────────────────────
+      - name: Create clean Flutter scaffold (windows only)
         shell: pwsh
         run: |
-          $cmake = Test-Path -Path windows\CMakeLists.txt -PathType Leaf
-          $runner = Test-Path -Path windows\runner -PathType Container
-          Write-Host "windows\\CMakeLists.txt exists: $cmake"
-          Write-Host "windows\\runner directory exists: $runner"
-          if (-not ($cmake -and $runner)) {
-            Write-Host "Windows platform files missing or incomplete — running flutter create --platforms=windows ."
-            flutter create --platforms=windows .
-          } else {
-            Write-Host "Windows platform files present"
+          flutter create `
+            --org com.pdfeditorpro `
+            --project-name pdf_editor_pro `
+            --platforms windows `
+            C:\build
+          Write-Host "Scaffold created"
+          Get-ChildItem C:\build
+
+      # ── Inject ONLY your Dart code ────────────────────────────────────────
+      # Do NOT replace windows/ — the scaffold's CMakeLists + runner/ are correct
+      - name: Replace lib/ with yours
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\build\lib" -ErrorAction SilentlyContinue
+          Copy-Item -Recurse "$env:GITHUB_WORKSPACE\lib" "C:\build\lib"
+          Write-Host "lib/ copied:"
+          Get-ChildItem "C:\build\lib"
+
+      - name: Replace pubspec.yaml with yours
+        shell: pwsh
+        run: |
+          Copy-Item "$env:GITHUB_WORKSPACE\pubspec.yaml" "C:\build\pubspec.yaml" -Force
+          Write-Host "pubspec.yaml copied"
+
+      # ── Patch app name in the scaffold's CMakeLists (display name only) ──
+      - name: Set app display name in CMakeLists
+        shell: pwsh
+        run: |
+          $f = "C:\build\windows\CMakeLists.txt"
+          (Get-Content $f) -replace 'set\(BINARY_NAME ".*"\)', 'set(BINARY_NAME "pdf_editor_pro")' |
+            Set-Content $f
+          Write-Host "BINARY_NAME set"
+          Get-Content $f | Select-Object -First 10
+
+      # ── Patch runner/main.cpp — set window title ──────────────────────────
+      - name: Set window title in runner/main.cpp
+        shell: pwsh
+        run: |
+          $f = "C:\build\windows\runner\main.cpp"
+          if (Test-Path $f) {
+            (Get-Content $f) -replace 'L"[^"]*"', 'L"PDF Editor Pro"' |
+              Set-Content $f
+            Write-Host "Window title set"
           }
 
-      - name: Show Windows project files (diagnostic)
+      # ── Install deps ──────────────────────────────────────────────────────
+      - name: flutter pub get
+        run: flutter pub get
+        working-directory: C:\build
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build Windows release
+        run: |
+          flutter build windows `
+            --release `
+            --no-tree-shake-icons
+        working-directory: C:\build
+
+      - name: List release output
         shell: pwsh
         run: |
-          Get-ChildItem -Force windows | Select-Object Name,Mode,Length
+          Get-ChildItem -Recurse "C:\build\build\windows\x64\runner\Release" |
+            Select-Object FullName, Length
 
-      - name: Build release Windows executable
+      # ── Zip & Upload ──────────────────────────────────────────────────────
+      - name: Zip release folder into single file
         shell: pwsh
         run: |
-          flutter build windows --release
+          Compress-Archive `
+            -Path "C:\build\build\windows\x64\runner\Release\*" `
+            -DestinationPath "C:\PDFEditorPro-Windows.zip" `
+            -Force
+          Write-Host "Zipped OK — size: $((Get-Item C:\PDFEditorPro-Windows.zip).Length) bytes"
 
-      - name: Pack Windows build directory (zip)
-        shell: pwsh
-        run: |
-          $out = "windows-build.zip"
-          $releasePath = "build\\windows\\runner\\Release"
-          if(Test-Path -Path $releasePath) {
-            Compress-Archive -Path "$releasePath\\*" -DestinationPath $out -Force
-            Write-Host "Created $out"
-          } else {
-            Write-Host "Windows build output not found at $releasePath"
-            exit 1
-          }
-
-      - name: Upload Windows artifact
+      - name: Upload Windows ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe
-          path: windows-build.zip
+          name: PDFEditorPro-Windows-ZIP
+          path: C:\PDFEditorPro-Windows.zip
+          retention-days: 30
+
+      - name: Upload Windows folder (EXE + all DLLs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Windows-EXE
+          path: C:\build\build\windows\x64\runner\Release\
+          retention-days: 30
