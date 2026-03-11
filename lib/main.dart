@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/merge_split_screen.dart';
 import 'services/pdf_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // orientation lock — portrait + landscape
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.landscapeLeft,
@@ -33,14 +33,12 @@ class PdfEditorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        // FIX: 'background' was deprecated in Flutter 3.18 — use surfaceContainerLowest
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1A1A2E),
           brightness: Brightness.dark,
           primary: const Color(0xFF4FC3F7),
           secondary: const Color(0xFFE94560),
           surface: const Color(0xFF16213E),
-          surfaceContainerLowest: const Color(0xFF0F3460),
         ),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         scaffoldBackgroundColor: const Color(0xFF0D0D1A),
@@ -55,6 +53,11 @@ class PdfEditorApp extends StatelessWidget {
           ),
         ),
       ),
+      // FIX: register /merge route so pushNamed works
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/merge': (context) => const MergeSplitScreen(mode: MergeMode.merge),
+      },
       home: const HomeScreen(),
     );
   }

@@ -1,0 +1,41 @@
+// Microsoft Visual C++ generated resource script.
+#pragma code_page(65001)
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+Language: en-US
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904e4"
+        BEGIN
+            VALUE "CompanyName", "com.pdfeditorpro"
+            VALUE "FileDescription", "pdf_editor_pro"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "pdf_editor_pro"
+            VALUE "LegalCopyright", "Copyright (C) 2024 com.pdfeditorpro. All rights reserved."
+            VALUE "OriginalFilename", "pdf_editor_pro.exe"
+            VALUE "ProductName", "PDF Editor Pro"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END
+
+IDI_APP_ICON ICON "resources\\app_icon.ico"

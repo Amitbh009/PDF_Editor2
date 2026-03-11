@@ -10,28 +10,30 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ── PDF rendering & editing (pinned to exact compatible version) ────────────
+  # PDF rendering & editing
   syncfusion_flutter_pdf: 25.2.7
   syncfusion_flutter_pdfviewer: 25.2.7
 
-  # ── File I/O ────────────────────────────────────────────────────────────────
+  # File I/O
   file_picker: ^8.0.3
   path_provider: ^2.1.3
   permission_handler: ^11.3.1
 
-  # ── Image picking (image_cropper removed — caused Gradle conflicts) ─────────
+  # Image picking — mobile only (desktop uses file_picker)
   image_picker: ^1.1.2
 
-  # ── UI ──────────────────────────────────────────────────────────────────────
+  # UI
   flutter_colorpicker: ^1.1.0
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
   gap: ^3.0.1
   provider: ^6.1.2
-  fluttertoast: ^8.2.6
   share_plus: ^9.0.0
   open_file: ^3.3.2
   uuid: ^4.4.0
+
+  # FIX: fluttertoast removed — replaced with SnackBar/debugPrint
+  # fluttertoast was crashing on Windows desktop
 
 flutter:
   uses-material-design: true

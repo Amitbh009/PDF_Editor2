@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:gap/gap.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../services/pdf_state.dart';
 import '../services/pdf_service.dart';
@@ -184,9 +186,7 @@ class _EditorScreenState extends State<EditorScreen> {
           IconButton(
             icon: const Icon(Icons.chevron_left_rounded),
             onPressed: state.currentPage > 0
-                ? () {
-                    _pdfController.previousPage();
-                  }
+                ? () => _pdfController.previousPage()
                 : null,
             color: Colors.white,
           ),
@@ -206,9 +206,7 @@ class _EditorScreenState extends State<EditorScreen> {
           IconButton(
             icon: const Icon(Icons.chevron_right_rounded),
             onPressed: state.currentPage < state.totalPages - 1
-                ? () {
-                    _pdfController.nextPage();
-                  }
+                ? () => _pdfController.nextPage()
                 : null,
             color: Colors.white,
           ),
@@ -233,7 +231,6 @@ class _EditorScreenState extends State<EditorScreen> {
   void _handleCanvasTap(BuildContext context, PdfState state,
       TapDownDetails details) async {
     final pos = details.localPosition;
-
     switch (state.activeTool) {
       case EditorTool.text:
         _showTextDialog(context, state, pos);
@@ -271,15 +268,27 @@ class _EditorScreenState extends State<EditorScreen> {
     ));
   }
 
-  Future<void> _pickAndAddImage(
-      BuildContext context, PdfState state) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
+  Future<void> _pickAndAddImage(BuildContext context, PdfState state) async {
+    String? imagePath;
+
+    // FIX: Use file_picker on desktop (Windows), image_picker on mobile
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery);
+      imagePath = picked?.path;
+    } else {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: false,
+      );
+      imagePath = result?.files.first.path;
+    }
+
+    if (imagePath == null) return;
 
     state.addImageAnnotation(ImageAnnotation(
       id: _uuid.v4(),
-      imagePath: picked.path,
+      imagePath: imagePath,
       position: const Offset(50, 50),
       pageIndex: state.currentPage,
     ));
@@ -312,10 +321,6 @@ class _EditorScreenState extends State<EditorScreen> {
       BuildContext context, PdfState state, String action) async {
     switch (action) {
       case 'save':
-        setState(() => _isSaving = true);
-        await PdfService.savePdf(state);
-        setState(() => _isSaving = false);
-        break;
       case 'save_as':
         setState(() => _isSaving = true);
         await PdfService.savePdf(state);
@@ -325,6 +330,7 @@ class _EditorScreenState extends State<EditorScreen> {
         await PdfService.sharePdf(state);
         break;
       case 'merge':
+        // FIX: use named route registered in main.dart
         if (context.mounted) {
           Navigator.pushNamed(context, '/merge');
         }
@@ -359,8 +365,7 @@ class _EditorScreenState extends State<EditorScreen> {
               if (context.mounted) Navigator.pop(context, true);
             },
             child: Text('Save',
-                style:
-                    GoogleFonts.inter(color: const Color(0xFF4FC3F7))),
+                style: GoogleFonts.inter(color: const Color(0xFF4FC3F7))),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(

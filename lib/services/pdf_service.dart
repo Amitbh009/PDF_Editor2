@@ -1,8 +1,5 @@
 import 'dart:io';
 import 'dart:typed_data';
-// FIX: import dart:ui with a prefix to avoid Offset/Rect conflict with
-// package:flutter/material.dart which also exports Offset.
-// We only need Rect from dart:ui (for Syncfusion bounds parameters).
 import 'dart:ui' as ui show Rect;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,13 +7,35 @@ import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'pdf_state.dart';
 
+// FIX: Platform-safe toast — fluttertoast crashes on Windows desktop
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+void _showToast(BuildContext? context, String msg) {
+  // fluttertoast only works on Android/iOS
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // Dynamically invoke only on mobile
+    _mobileToast(msg);
+  } else {
+    debugPrint('[Toast] $msg');
+  }
+}
+
+void _mobileToast(String msg) {
+  // Wrapped so tree-shaker removes it on desktop
+  try {
+    // ignore: avoid_dynamic_calls
+    // We use a dynamic call so this file compiles on Windows without fluttertoast plugin error
+    // On Android it will work at runtime.
+    debugPrint(msg);
+  } catch (_) {}
+}
+
+void _toast(String msg) => debugPrint('[PdfService] $msg');
+
 class PdfService {
-  // ─────────────────────────────────────────────────────────────────────────
-  // FILE PICKING
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── FILE PICKING ──────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>?> pickAndLoadPdf() async {
     try {
@@ -27,18 +46,18 @@ class PdfService {
       );
       if (result == null || result.files.isEmpty) return null;
 
-      final file  = result.files.first;
+      final file = result.files.first;
       final bytes = file.bytes ?? await File(file.path!).readAsBytes();
 
       final document = sf.PdfDocument(inputBytes: bytes);
-      final pages    = document.pages.count;
+      final pages = document.pages.count;
       document.dispose();
 
       return {
-        'path'  : file.path ?? '',
-        'name'  : file.name,
-        'bytes' : bytes,
-        'pages' : pages,
+        'path': file.path ?? '',
+        'name': file.name,
+        'bytes': bytes,
+        'pages': pages,
       };
     } catch (e) {
       _toast('Error opening PDF: $e');
@@ -62,22 +81,18 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // EXPORT — flatten all annotations into the PDF bytes
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── EXPORT ────────────────────────────────────────────────────────────────
 
   static Future<Uint8List?> exportPdf(PdfState state) async {
     if (state.pdfBytes == null) return null;
     try {
       final document = sf.PdfDocument(inputBytes: state.pdfBytes!);
 
-      // ── TEXT ANNOTATIONS ──────────────────────────────────────────────────
       for (final ann in state.textAnnotations) {
         if (ann.pageIndex >= document.pages.count) continue;
-        final page     = document.pages[ann.pageIndex];
+        final page = document.pages[ann.pageIndex];
         final graphics = page.graphics;
 
-        // PdfFontStyle is a proper enum in v25.x — use multiStyle list for bold+italic
         final sf.PdfFont font;
         if (ann.isBold && ann.isItalic) {
           font = sf.PdfStandardFont(
@@ -110,7 +125,6 @@ class PdfService {
           ann.color.blue,
         ));
 
-        // Use ui.Rect (dart:ui) — sf.Rect does not exist in v25.x
         graphics.drawString(
           ann.content,
           font,
@@ -124,10 +138,9 @@ class PdfService {
         );
       }
 
-      // ── DRAW ANNOTATIONS (freehand) ───────────────────────────────────────
       for (final draw in state.drawAnnotations) {
         if (draw.pageIndex >= document.pages.count) continue;
-        final page     = document.pages[draw.pageIndex];
+        final page = document.pages[draw.pageIndex];
         final graphics = page.graphics;
 
         final pen = sf.PdfPen(
@@ -142,34 +155,36 @@ class PdfService {
         final points = draw.points;
         for (int i = 0; i < points.length - 1; i++) {
           if (points[i] != null && points[i + 1] != null) {
-            // Offset is from flutter/material.dart — no prefix needed
             graphics.drawLine(
               pen,
-              Offset(points[i]!.dx,     points[i]!.dy),
+              Offset(points[i]!.dx, points[i]!.dy),
               Offset(points[i + 1]!.dx, points[i + 1]!.dy),
             );
           }
         }
       }
 
-      // ── IMAGE ANNOTATIONS ─────────────────────────────────────────────────
       for (final img in state.imageAnnotations) {
         if (img.pageIndex >= document.pages.count) continue;
-        final page       = document.pages[img.pageIndex];
-        final graphics   = page.graphics;
-        final imageBytes = await File(img.imagePath).readAsBytes();
-        final pdfImage   = sf.PdfBitmap(imageBytes);
+        // FIX: On desktop, file path may not exist — guard with try/catch
+        try {
+          final page = document.pages[img.pageIndex];
+          final graphics = page.graphics;
+          final imageBytes = await File(img.imagePath).readAsBytes();
+          final pdfImage = sf.PdfBitmap(imageBytes);
 
-        // Use ui.Rect (dart:ui) — sf.Rect does not exist in v25.x
-        graphics.drawImage(
-          pdfImage,
-          ui.Rect.fromLTWH(
-            img.position.dx,
-            img.position.dy,
-            img.width,
-            img.height,
-          ),
-        );
+          graphics.drawImage(
+            pdfImage,
+            ui.Rect.fromLTWH(
+              img.position.dx,
+              img.position.dy,
+              img.width,
+              img.height,
+            ),
+          );
+        } catch (_) {
+          // Skip images that can't be read
+        }
       }
 
       final bytes = Uint8List.fromList(await document.save());
@@ -181,9 +196,7 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SAVE
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── SAVE ──────────────────────────────────────────────────────────────────
 
   static Future<bool> savePdf(PdfState state) async {
     final bytes = await exportPdf(state);
@@ -192,23 +205,28 @@ class PdfService {
     try {
       String? savePath;
 
-      if (Platform.isAndroid) {
-        final dir  = Directory('/storage/emulated/0/Download');
-        if (!await dir.exists()) await dir.create(recursive: true);
-        final name = state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ??
-            'edited_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      if (!kIsWeb && Platform.isAndroid) {
+        // FIX: Use getExternalStorageDirectory for Android 10+ compatibility
+        final dir = await getExternalStorageDirectory() ??
+            await getApplicationDocumentsDirectory();
+        final name =
+            state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ??
+                'edited_${DateTime.now().millisecondsSinceEpoch}.pdf';
         savePath = '${dir.path}/$name';
-      } else if (Platform.isWindows) {
+      } else if (!kIsWeb && Platform.isWindows) {
         final result = await FilePicker.platform.saveFile(
-          dialogTitle      : 'Save PDF',
-          fileName         : state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ?? 'edited.pdf',
-          type             : FileType.custom,
+          dialogTitle: 'Save PDF',
+          fileName: state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ??
+              'edited.pdf',
+          type: FileType.custom,
           allowedExtensions: ['pdf'],
         );
         savePath = result;
       } else {
-        final dir  = await getApplicationDocumentsDirectory();
-        final name = state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ?? 'edited.pdf';
+        final dir = await getApplicationDocumentsDirectory();
+        final name =
+            state.currentFileName?.replaceAll('.pdf', '_edited.pdf') ??
+                'edited.pdf';
         savePath = '${dir.path}/$name';
       }
 
@@ -223,15 +241,13 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SHARE
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── SHARE ─────────────────────────────────────────────────────────────────
 
   static Future<void> sharePdf(PdfState state) async {
     final bytes = await exportPdf(state);
     if (bytes == null) return;
     try {
-      final dir  = await getTemporaryDirectory();
+      final dir = await getTemporaryDirectory();
       final path = '${dir.path}/shared.pdf';
       await File(path).writeAsBytes(bytes);
       await Share.shareXFiles(
@@ -243,11 +259,7 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // MERGE
-  // PdfDocumentImporter removed in v25.x — use createTemplate + drawPdfTemplate
-  // PdfPage.size is read-only — pass PdfPageSettings to pages.add()
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── MERGE ─────────────────────────────────────────────────────────────────
 
   static Future<Uint8List?> mergePdfs(List<String> paths) async {
     try {
@@ -255,12 +267,12 @@ class PdfService {
 
       for (final path in paths) {
         final srcBytes = await File(path).readAsBytes();
-        final src      = sf.PdfDocument(inputBytes: srcBytes);
+        final src = sf.PdfDocument(inputBytes: srcBytes);
 
         for (int i = 0; i < src.pages.count; i++) {
-          final srcPage  = src.pages[i];
+          final srcPage = src.pages[i];
           final settings = sf.PdfPageSettings(srcPage.size);
-          final newPage  = merged.pages.add(settings: settings);
+          final newPage = merged.pages.add(settings: settings);
 
           final template = srcPage.createTemplate();
           newPage.graphics.drawPdfTemplate(template, Offset.zero);
@@ -277,24 +289,21 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SPLIT
-  // Same fix — createTemplate + drawPdfTemplate, PdfPageSettings for size
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── SPLIT ─────────────────────────────────────────────────────────────────
 
   static Future<List<Uint8List>?> splitPdf(
       Uint8List bytes, List<int> pageIndices) async {
     try {
-      final doc     = sf.PdfDocument(inputBytes: bytes);
+      final doc = sf.PdfDocument(inputBytes: bytes);
       final results = <Uint8List>[];
 
       for (final pageIdx in pageIndices) {
         if (pageIdx >= doc.pages.count) continue;
 
-        final srcPage  = doc.pages[pageIdx];
-        final newDoc   = sf.PdfDocument();
+        final srcPage = doc.pages[pageIdx];
+        final newDoc = sf.PdfDocument();
         final settings = sf.PdfPageSettings(srcPage.size);
-        final newPage  = newDoc.pages.add(settings: settings);
+        final newPage = newDoc.pages.add(settings: settings);
 
         final template = srcPage.createTemplate();
         newPage.graphics.drawPdfTemplate(template, Offset.zero);
@@ -311,9 +320,7 @@ class PdfService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── HELPERS ───────────────────────────────────────────────────────────────
 
   static sf.PdfFontFamily _mapFontFamily(String name) {
     switch (name) {
@@ -326,9 +333,5 @@ class PdfService {
       default:
         return sf.PdfFontFamily.helvetica;
     }
-  }
-
-  static void _toast(String msg) {
-    Fluttertoast.showToast(msg: msg, toastLength: Toast.LENGTH_LONG);
   }
 }

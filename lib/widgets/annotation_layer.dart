@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -82,9 +83,7 @@ class _AnnotationLayerState extends State<AnnotationLayer> {
             ),
             child: Stack(
               children: [
-                // Image annotations
                 ...imageAnns.map((ann) => _ImageAnnotationWidget(ann: ann)),
-                // Text annotations
                 ...textAnns.map((ann) => _TextAnnotationWidget(ann: ann)),
               ],
             ),
@@ -304,17 +303,10 @@ class _ImageAnnotationWidgetState extends State<_ImageAnnotationWidget> {
                     ? Border.all(color: const Color(0xFF4FC3F7), width: 2)
                     : null,
               ),
-              child: Image.file(
-                File(widget.ann.imagePath),
-                fit: BoxFit.fill,
-                errorBuilder: (_, __, ___) => Container(
-                  color: Colors.grey.shade800,
-                  child: const Icon(Icons.broken_image, color: Colors.white),
-                ),
-              ),
+              // FIX: Use Image.file only when file exists; show placeholder otherwise
+              child: _buildImage(),
             ),
             if (_isSelected) ...[
-              // Delete
               Positioned(
                 top: -12,
                 right: -12,
@@ -331,7 +323,6 @@ class _ImageAnnotationWidgetState extends State<_ImageAnnotationWidget> {
                   ),
                 ),
               ),
-              // Resize handle
               Positioned(
                 bottom: -8,
                 right: -8,
@@ -341,8 +332,7 @@ class _ImageAnnotationWidgetState extends State<_ImageAnnotationWidget> {
                       _width = (_width + d.delta.dx).clamp(50, 800);
                       _height = (_height + d.delta.dy).clamp(30, 800);
                     });
-                    state.resizeImageAnnotation(
-                        widget.ann.id, _width, _height);
+                    state.resizeImageAnnotation(widget.ann.id, _width, _height);
                   },
                   child: Container(
                     width: 18,
@@ -359,6 +349,24 @@ class _ImageAnnotationWidgetState extends State<_ImageAnnotationWidget> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    // kIsWeb doesn't support File I/O
+    if (kIsWeb) {
+      return Container(
+        color: Colors.grey.shade800,
+        child: const Icon(Icons.image, color: Colors.white54),
+      );
+    }
+    return Image.file(
+      File(widget.ann.imagePath),
+      fit: BoxFit.fill,
+      errorBuilder: (_, __, ___) => Container(
+        color: Colors.grey.shade800,
+        child: const Icon(Icons.broken_image, color: Colors.white),
       ),
     );
   }

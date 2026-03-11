@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gap/gap.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:open_file/open_file.dart';
 import '../services/pdf_service.dart';
 import '../services/pdf_state.dart';
@@ -46,8 +46,6 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
           : _buildSplitUI(),
     );
   }
-
-  // ─────────────────── MERGE ───────────────────
 
   Widget _buildMergeUI() {
     return Column(
@@ -143,8 +141,6 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
     );
   }
 
-  // ─────────────────── SPLIT ───────────────────
-
   Widget _buildSplitUI() {
     return Column(
       children: [
@@ -170,7 +166,6 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
           Expanded(
             child: Column(
               children: [
-                // Header
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -278,9 +273,7 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
   }
 
   Widget _buildSplitActions() {
-    final count = _selectAll
-        ? _totalPages
-        : _selectedPages.length;
+    final count = _selectAll ? _totalPages : _selectedPages.length;
     return Container(
       padding: const EdgeInsets.all(20),
       color: const Color(0xFF1A1A2E),
@@ -314,12 +307,19 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
     );
   }
 
-  // ─────────────────── ACTIONS ───────────────────
-
   Future<void> _addFiles() async {
     final paths = await PdfService.pickMultiplePdfs();
     if (paths.isEmpty) return;
     setState(() => _selectedFiles.addAll(paths));
+  }
+
+  Future<Directory> _getSaveDir() async {
+    // FIX: platform-safe save directory
+    if (!kIsWeb && Platform.isAndroid) {
+      return await getExternalStorageDirectory() ??
+          await getApplicationDocumentsDirectory();
+    }
+    return getApplicationDocumentsDirectory() as Future<Directory>;
   }
 
   Future<void> _merge() async {
@@ -327,19 +327,20 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
     try {
       final bytes = await PdfService.mergePdfs(_selectedFiles);
       if (bytes == null) return;
-      final dir = Platform.isAndroid
-          ? Directory('/storage/emulated/0/Download')
-          : await getApplicationDocumentsDirectory();
-      if (Platform.isAndroid && !await dir.exists()) {
-        await dir.create(recursive: true);
-      }
+
+      final dir = await _getSaveDir();
       final path =
           '${dir.path}/merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
       await File(path).writeAsBytes(bytes);
-      Fluttertoast.showToast(msg: 'Merged! Saved to $path');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Merged! Saved to $path')),
+        );
+      }
       await OpenFile.open(path);
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -360,26 +361,26 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
     try {
       final pages = _selectAll
           ? List.generate(_totalPages, (i) => i)
-          : _selectedPages.toList()..sort();
+          : _selectedPages.toList()
+        ..sort();
       final results = await PdfService.splitPdf(_loadedBytes!, pages);
       if (results == null) return;
 
-      final dir = Platform.isAndroid
-          ? Directory('/storage/emulated/0/Download')
-          : await getApplicationDocumentsDirectory();
-      if (Platform.isAndroid && !await dir.exists()) {
-        await dir.create(recursive: true);
-      }
+      final dir = await _getSaveDir();
 
       for (int i = 0; i < results.length; i++) {
         final path =
             '${dir.path}/page_${pages[i] + 1}_${DateTime.now().millisecondsSinceEpoch}.pdf';
         await File(path).writeAsBytes(results[i]);
       }
-      Fluttertoast.showToast(
-          msg: '${results.length} files saved to ${dir.path}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${results.length} files saved to ${dir.path}')),
+        );
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -401,8 +402,7 @@ class _MergeSplitScreenState extends State<MergeSplitScreen> {
                 color: Colors.white38)),
         const Gap(8),
         Text(subtitle,
-            style: GoogleFonts.inter(
-                fontSize: 13, color: Colors.white24)),
+            style: GoogleFonts.inter(fontSize: 13, color: Colors.white24)),
         if (action != null) ...[const Gap(24), action],
       ],
     );
