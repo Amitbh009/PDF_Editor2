@@ -256,10 +256,11 @@ class PdfService {
 
         for (int i = 0; i < src.pages.count; i++) {
           final srcPage = src.pages[i];
-          final newPage = merged.pages.add();
 
-          // Match the source page dimensions
-          newPage.size = srcPage.size;
+          // FIX: PdfPage.size is read-only in v25.x — pass size via
+          // PdfPageSettings at add() time instead of setting it after.
+          final settings = sf.PdfPageSettings(srcPage.size);
+          final newPage  = merged.pages.add(settings: settings);
 
           // Stamp the source page content onto the new page
           final template = srcPage.createTemplate();
@@ -296,9 +297,11 @@ class PdfService {
 
         final srcPage = doc.pages[pageIdx];
         final newDoc  = sf.PdfDocument();
-        final newPage = newDoc.pages.add();
 
-        newPage.size = srcPage.size;
+        // FIX: PdfPage.size is read-only in v25.x — pass size via
+        // PdfPageSettings at add() time instead of setting it after.
+        final settings = sf.PdfPageSettings(srcPage.size);
+        final newPage  = newDoc.pages.add(settings: settings);
 
         final template = srcPage.createTemplate();
         newPage.graphics.drawPdfTemplate(
