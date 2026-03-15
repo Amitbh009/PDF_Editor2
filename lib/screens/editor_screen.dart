@@ -14,7 +14,6 @@ import '../widgets/editor_toolbar.dart';
 import '../widgets/annotation_layer.dart';
 import '../widgets/text_editor_dialog.dart';
 import '../widgets/signature_pad.dart';
-import '../widgets/color_picker_panel.dart';
 import '../widgets/properties_panel.dart';
 
 class EditorScreen extends StatefulWidget {
