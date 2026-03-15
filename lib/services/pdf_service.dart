@@ -274,13 +274,18 @@ class PdfService {
           
           // Create a section with the appropriate page settings
           final section = merged.sections?.add();
-          if (section != null) {
-            section.pageSettings.size = srcPage.size;
-            final newPage = section.pages.add();
-
-            final template = srcPage.createTemplate();
-            newPage.graphics.drawPdfTemplate(template, Offset.zero);
+          if (section == null) {
+            _toast('Error: Could not create PDF section');
+            src.dispose();
+            merged.dispose();
+            return null;
           }
+          
+          section.pageSettings.size = srcPage.size;
+          final newPage = section.pages.add();
+
+          final template = srcPage.createTemplate();
+          newPage.graphics.drawPdfTemplate(template, Offset.zero);
         }
         src.dispose();
       }
@@ -310,15 +315,19 @@ class PdfService {
         
         // Create a section with the appropriate page settings
         final section = newDoc.sections?.add();
-        if (section != null) {
-          section.pageSettings.size = srcPage.size;
-          final newPage = section.pages.add();
-
-          final template = srcPage.createTemplate();
-          newPage.graphics.drawPdfTemplate(template, Offset.zero);
-
-          results.add(Uint8List.fromList(await newDoc.save()));
+        if (section == null) {
+          _toast('Error: Could not create PDF section');
+          newDoc.dispose();
+          continue;
         }
+        
+        section.pageSettings.size = srcPage.size;
+        final newPage = section.pages.add();
+
+        final template = srcPage.createTemplate();
+        newPage.graphics.drawPdfTemplate(template, Offset.zero);
+
+        results.add(Uint8List.fromList(await newDoc.save()));
         newDoc.dispose();
       }
 
