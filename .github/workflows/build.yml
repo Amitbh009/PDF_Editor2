@@ -108,25 +108,22 @@ jobs:
       - name: List APK outputs
         run: ls -lh /tmp/build/build/app/outputs/flutter-apk/
 
-      - name: Upload arm64-v8a APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-Android-arm64
-          path: /tmp/build/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          retention-days: 30
+      - name: Rename APKs with proper names
+        run: |
+          cd /tmp/build/build/app/outputs/flutter-apk/
+          cp app-arm64-v8a-release.apk PDFEditorPro-Android-arm64-v8a.apk
+          cp app-armeabi-v7a-release.apk PDFEditorPro-Android-armeabi-v7a.apk
+          cp app-x86_64-release.apk PDFEditorPro-Android-x86_64.apk
+          ls -lh *.apk
 
-      - name: Upload armeabi-v7a APK
+      - name: Upload All Android APKs
         uses: actions/upload-artifact@v4
         with:
-          name: PDFEditorPro-Android-armeabi
-          path: /tmp/build/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          retention-days: 30
-
-      - name: Upload x86_64 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-Android-x86_64
-          path: /tmp/build/build/app/outputs/flutter-apk/app-x86_64-release.apk
+          name: PDFEditorPro-Android-APKs
+          path: |
+            /tmp/build/build/app/outputs/flutter-apk/PDFEditorPro-Android-arm64-v8a.apk
+            /tmp/build/build/app/outputs/flutter-apk/PDFEditorPro-Android-armeabi-v7a.apk
+            /tmp/build/build/app/outputs/flutter-apk/PDFEditorPro-Android-x86_64.apk
           retention-days: 30
 
 
@@ -207,11 +204,28 @@ jobs:
             --no-tree-shake-icons
         working-directory: C:\build
 
-      - name: Zip release folder
+      - name: Prepare Windows artifacts
+        shell: pwsh
+        run: |
+          # Create a clean directory for the Windows build
+          New-Item -ItemType Directory -Force "C:\WindowsBuild" | Out-Null
+          
+          # Copy all files from Release folder
+          Copy-Item -Recurse -Force "C:\build\build\windows\x64\runner\Release\*" "C:\WindowsBuild\"
+          
+          # Rename the exe to have a better name
+          if (Test-Path "C:\WindowsBuild\pdf_editor_pro.exe") {
+            Copy-Item "C:\WindowsBuild\pdf_editor_pro.exe" "C:\WindowsBuild\PDFEditorPro.exe"
+          }
+          
+          # List contents
+          Get-ChildItem "C:\WindowsBuild" | Select-Object Name, Length
+
+      - name: Create Windows ZIP
         shell: pwsh
         run: |
           Compress-Archive `
-            -Path "C:\build\build\windows\x64\runner\Release\*" `
+            -Path "C:\WindowsBuild\*" `
             -DestinationPath "C:\PDFEditorPro-Windows.zip" `
             -Force
 
@@ -222,9 +236,9 @@ jobs:
           path: C:\PDFEditorPro-Windows.zip
           retention-days: 30
 
-      - name: Upload Windows folder
+      - name: Upload Windows EXE and DLLs
         uses: actions/upload-artifact@v4
         with:
-          name: PDFEditorPro-Windows-EXE
-          path: C:\build\build\windows\x64\runner\Release\
+          name: PDFEditorPro-Windows-Portable
+          path: C:\WindowsBuild\
           retention-days: 30
