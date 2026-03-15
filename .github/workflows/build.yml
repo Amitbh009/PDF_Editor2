@@ -1,0 +1,166 @@
+name: Build PDF Editor Pro
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual trigger from GitHub UI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW THIS WORKS:
+#
+# This repository contains a complete Flutter project with platform folders
+# (android/, windows/) already committed. We build directly without scaffolding.
+#
+# Each job:
+# 1. Checks out the repository
+# 2. Sets up Flutter and platform-specific tools
+# 3. Runs flutter pub get to install dependencies
+# 4. Builds the target platform
+# 5. Uploads the build artifacts
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  # ─── Android APK ────────────────────────────────────────────────────────────
+  build-android-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.22.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: stable
+          cache: true
+
+      - name: Disable analytics
+        run: flutter config --no-analytics
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Flutter doctor (debug)
+        run: flutter doctor -v
+
+      - name: Build APK release (split per ABI)
+        run: flutter build apk --release --split-per-abi --no-tree-shake-icons
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Android-APKs
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
+
+  # ─── Android App Bundle ──────────────────────────────────────────────────────
+  build-android-aab:
+    name: Build Android App Bundle (Play Store)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.22.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: stable
+          cache: true
+
+      - name: Disable analytics
+        run: flutter config --no-analytics
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release --no-tree-shake-icons
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Android-AAB
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+  # ─── Windows Desktop ─────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows Desktop EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.22.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: stable
+          cache: true
+
+      - name: Disable analytics & enable Windows
+        run: |
+          flutter config --no-analytics
+          flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release --no-tree-shake-icons
+
+      - name: Upload Windows EXE folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Windows-Release
+          path: build/windows/x64/runner/Release/
+          retention-days: 30
+
+  # ─── Web Build ───────────────────────────────────────────────────────────────
+  build-web:
+    name: Build Web App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.22.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: stable
+          cache: true
+
+      - name: Disable analytics
+        run: flutter config --no-analytics
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Web release
+        run: flutter build web --release --no-tree-shake-icons
+
+      - name: Upload Web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFEditorPro-Web
+          path: build/web/
+          retention-days: 30
