@@ -275,7 +275,7 @@ class PdfService {
           // Create a section with the appropriate page settings
           final section = merged.sections?.add();
           if (section == null) {
-            _toast('Failed to create PDF section for page merge. Document may be corrupted.');
+            _toast('Failed to create PDF section during merge operation.');
             src.dispose();
             merged.dispose();
             return null;
@@ -316,7 +316,7 @@ class PdfService {
         // Create a section with the appropriate page settings
         final section = newDoc.sections?.add();
         if (section == null) {
-          _toast('Failed to create PDF section for page split. Page may be corrupted.');
+          _toast('Failed to create PDF section during split operation.');
           newDoc.dispose();
           continue;
         }
