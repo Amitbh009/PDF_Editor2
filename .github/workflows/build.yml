@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch: # allow manual trigger from GitHub UI
 
+# Limit permissions of GITHUB_TOKEN for security
+permissions:
+  contents: read
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HOW THIS WORKS:
 #
