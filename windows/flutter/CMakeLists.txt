@@ -80,7 +80,8 @@ foreach(SOURCE ${CPP_WRAPPER_SOURCES_CORE} ${CPP_WRAPPER_SOURCES_PLUGIN} ${CPP_W
 endforeach(SOURCE)
 
 add_library(flutter_wrapper_core STATIC
-  ${CPP_WRAPPER_SOURCES_CORE}
+  ${EPHEMERAL_DIR}/cpp_client_wrapper/core_implementations.cc
+  ${EPHEMERAL_DIR}/cpp_client_wrapper/standard_codec.cc
 )
 apply_standard_settings(flutter_wrapper_core)
 target_link_libraries(flutter_wrapper_core PUBLIC flutter)
@@ -91,7 +92,7 @@ target_include_directories(flutter_wrapper_core PUBLIC
 add_dependencies(flutter_wrapper_core flutter_assemble)
 
 add_library(flutter_wrapper_plugin STATIC
-  ${CPP_WRAPPER_SOURCES_PLUGIN}
+  ${EPHEMERAL_DIR}/cpp_client_wrapper/plugin_registrar.cc
 )
 apply_standard_settings(flutter_wrapper_plugin)
 target_link_libraries(flutter_wrapper_plugin PUBLIC flutter_wrapper_core)
@@ -102,7 +103,7 @@ target_include_directories(flutter_wrapper_plugin PUBLIC
 add_dependencies(flutter_wrapper_plugin flutter_assemble)
 
 add_library(flutter_wrapper_app STATIC
-  ${CPP_WRAPPER_SOURCES_APP}
+  ${EPHEMERAL_DIR}/cpp_client_wrapper/flutter_view_controller.cc
 )
 apply_standard_settings(flutter_wrapper_app)
 target_link_libraries(flutter_wrapper_app PUBLIC flutter_wrapper_core)
