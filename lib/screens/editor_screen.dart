@@ -250,7 +250,9 @@ class _EditorScreenState extends State<EditorScreen> {
         initialColor: state.activeColor,
         initialBold: state.isBold,
         initialItalic: state.isItalic,
+        initialUnderline: state.isUnderline,
         initialFont: state.activeFontFamily,
+        initialAlignment: state.activeAlignment,
       ),
     );
     if (result == null) return;
@@ -263,7 +265,9 @@ class _EditorScreenState extends State<EditorScreen> {
       color: result['color'],
       isBold: result['bold'],
       isItalic: result['italic'],
+      isUnderline: result['underline'] ?? false,
       fontFamily: result['font'],
+      alignment: result['alignment'] ?? TextAlign.left,
       pageIndex: state.currentPage,
     ));
   }

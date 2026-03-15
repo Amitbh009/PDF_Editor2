@@ -47,7 +47,8 @@ class _AnnotationLayerState extends State<AnnotationLayer> {
           onPanStart: (details) {
             if (state.activeTool == EditorTool.draw ||
                 state.activeTool == EditorTool.highlight ||
-                state.activeTool == EditorTool.underline) {
+                state.activeTool == EditorTool.underline ||
+                state.activeTool == EditorTool.strikethrough) {
               setState(() {
                 _currentDraw = DrawAnnotation(
                   id: _uuid.v4(),
@@ -175,6 +176,7 @@ class _TextAnnotationWidgetState extends State<_TextAnnotationWidget> {
               ),
               child: Text(
                 widget.ann.content,
+                textAlign: widget.ann.alignment,
                 style: TextStyle(
                   fontSize: widget.ann.fontSize,
                   color: widget.ann.color,
@@ -184,6 +186,10 @@ class _TextAnnotationWidgetState extends State<_TextAnnotationWidget> {
                   fontStyle: widget.ann.isItalic
                       ? FontStyle.italic
                       : FontStyle.normal,
+                  decoration: widget.ann.isUnderline
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                  decorationColor: widget.ann.color,
                   fontFamily: widget.ann.fontFamily,
                 ),
               ),

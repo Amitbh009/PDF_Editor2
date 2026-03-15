@@ -24,6 +24,8 @@ class TextAnnotation {
   String fontFamily;
   bool isBold;
   bool isItalic;
+  bool isUnderline;
+  TextAlign alignment;
   int pageIndex;
 
   TextAnnotation({
@@ -35,6 +37,8 @@ class TextAnnotation {
     this.fontFamily = 'Helvetica',
     this.isBold = false,
     this.isItalic = false,
+    this.isUnderline = false,
+    this.alignment = TextAlign.left,
     required this.pageIndex,
   });
 }
@@ -89,6 +93,8 @@ class PdfState extends ChangeNotifier {
   String activeFontFamily = 'Helvetica';
   bool isBold = false;
   bool isItalic = false;
+  bool isUnderline = false;
+  TextAlign activeAlignment = TextAlign.left;
 
   List<TextAnnotation> textAnnotations = [];
   List<DrawAnnotation> drawAnnotations = [];
@@ -135,6 +141,31 @@ class PdfState extends ChangeNotifier {
 
   void setStrokeWidth(double width) {
     activeStrokeWidth = width;
+    notifyListeners();
+  }
+
+  void setFontFamily(String family) {
+    activeFontFamily = family;
+    notifyListeners();
+  }
+
+  void setBold(bool val) {
+    isBold = val;
+    notifyListeners();
+  }
+
+  void setItalic(bool val) {
+    isItalic = val;
+    notifyListeners();
+  }
+
+  void setUnderline(bool val) {
+    isUnderline = val;
+    notifyListeners();
+  }
+
+  void setAlignment(TextAlign align) {
+    activeAlignment = align;
     notifyListeners();
   }
 

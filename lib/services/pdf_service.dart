@@ -83,6 +83,11 @@ class PdfService {
 
   // ── EXPORT ────────────────────────────────────────────────────────────────
 
+  // Line height multiplier relative to font size (matches typical 1.4× line spacing)
+  static const double _lineHeightMultiplier = 1.4;
+  // Extra vertical padding added to the text bounds so descenders are not clipped
+  static const double _textBoundsPadding = 20.0;
+
   static Future<Uint8List?> exportPdf(PdfState state) async {
     if (state.pdfBytes == null) return null;
     try {
@@ -94,23 +99,22 @@ class PdfService {
         final graphics = page.graphics;
 
         final sf.PdfFont font;
-        if (ann.isBold && ann.isItalic) {
+        final styles = <sf.PdfFontStyle>[];
+        if (ann.isBold) styles.add(sf.PdfFontStyle.bold);
+        if (ann.isItalic) styles.add(sf.PdfFontStyle.italic);
+        if (ann.isUnderline) styles.add(sf.PdfFontStyle.underline);
+
+        if (styles.length > 1) {
           font = sf.PdfStandardFont(
             _mapFontFamily(ann.fontFamily),
             ann.fontSize,
-            multiStyle: [sf.PdfFontStyle.bold, sf.PdfFontStyle.italic],
+            multiStyle: styles,
           );
-        } else if (ann.isBold) {
+        } else if (styles.length == 1) {
           font = sf.PdfStandardFont(
             _mapFontFamily(ann.fontFamily),
             ann.fontSize,
-            style: sf.PdfFontStyle.bold,
-          );
-        } else if (ann.isItalic) {
-          font = sf.PdfStandardFont(
-            _mapFontFamily(ann.fontFamily),
-            ann.fontSize,
-            style: sf.PdfFontStyle.italic,
+            style: styles.first,
           );
         } else {
           font = sf.PdfStandardFont(
@@ -125,6 +129,27 @@ class PdfService {
           ann.color.blue,
         ));
 
+        // Use page width minus the x offset for text bounds so long lines wrap
+        final pageWidth = page.getClientSize().width;
+        final maxWidth = (pageWidth - ann.position.dx).clamp(100.0, pageWidth);
+        final lineCount = ann.content.split('\n').length + 1;
+        final estimatedHeight =
+            ann.fontSize * _lineHeightMultiplier * lineCount + _textBoundsPadding;
+
+        sf.PdfTextAlignment pdfAlign;
+        switch (ann.alignment) {
+          case TextAlign.center:
+            pdfAlign = sf.PdfTextAlignment.center;
+            break;
+          case TextAlign.right:
+            pdfAlign = sf.PdfTextAlignment.right;
+            break;
+          default:
+            pdfAlign = sf.PdfTextAlignment.left;
+        }
+
+        final format = sf.PdfStringFormat(alignment: pdfAlign);
+
         graphics.drawString(
           ann.content,
           font,
@@ -132,9 +157,10 @@ class PdfService {
           bounds: ui.Rect.fromLTWH(
             ann.position.dx,
             ann.position.dy,
-            300,
-            50,
+            maxWidth,
+            estimatedHeight,
           ),
+          format: format,
         );
       }
 

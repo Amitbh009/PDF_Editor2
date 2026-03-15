@@ -9,7 +9,9 @@ class TextEditorDialog extends StatefulWidget {
   final Color initialColor;
   final bool initialBold;
   final bool initialItalic;
+  final bool initialUnderline;
   final String initialFont;
+  final TextAlign initialAlignment;
 
   const TextEditorDialog({
     super.key,
@@ -18,7 +20,9 @@ class TextEditorDialog extends StatefulWidget {
     required this.initialColor,
     required this.initialBold,
     required this.initialItalic,
+    this.initialUnderline = false,
     required this.initialFont,
+    this.initialAlignment = TextAlign.left,
   });
 
   @override
@@ -31,7 +35,9 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
   late Color _color;
   late bool _bold;
   late bool _italic;
+  late bool _underline;
   late String _font;
+  late TextAlign _alignment;
 
   final _fonts = ['Helvetica', 'Times New Roman', 'Courier'];
 
@@ -43,7 +49,9 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
     _color = widget.initialColor;
     _bold = widget.initialBold;
     _italic = widget.initialItalic;
+    _underline = widget.initialUnderline;
     _font = widget.initialFont;
+    _alignment = widget.initialAlignment;
   }
 
   @override
@@ -76,7 +84,11 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
                 fontSize: _fontSize,
                 fontWeight: _bold ? FontWeight.bold : FontWeight.normal,
                 fontStyle: _italic ? FontStyle.italic : FontStyle.normal,
+                decoration:
+                    _underline ? TextDecoration.underline : TextDecoration.none,
+                decorationColor: _color,
               ),
+              textAlign: _alignment,
               maxLines: 5,
               autofocus: true,
               decoration: InputDecoration(
@@ -164,6 +176,13 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
                   italic: true,
                   onTap: () => setState(() => _italic = !_italic),
                 ),
+                const Gap(8),
+                _StyleBtn(
+                  label: 'U',
+                  active: _underline,
+                  underline: true,
+                  onTap: () => setState(() => _underline = !_underline),
+                ),
                 const Gap(16),
                 GestureDetector(
                   onTap: () => _pickColor(context),
@@ -183,6 +202,33 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
                       ),
                     ],
                   ),
+                ),
+              ],
+            ),
+            const Gap(12),
+            // Alignment buttons
+            Row(
+              children: [
+                Text('Align:',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, color: Colors.white60)),
+                const Gap(12),
+                _AlignBtn(
+                  icon: Icons.format_align_left_rounded,
+                  active: _alignment == TextAlign.left,
+                  onTap: () => setState(() => _alignment = TextAlign.left),
+                ),
+                const Gap(6),
+                _AlignBtn(
+                  icon: Icons.format_align_center_rounded,
+                  active: _alignment == TextAlign.center,
+                  onTap: () => setState(() => _alignment = TextAlign.center),
+                ),
+                const Gap(6),
+                _AlignBtn(
+                  icon: Icons.format_align_right_rounded,
+                  active: _alignment == TextAlign.right,
+                  onTap: () => setState(() => _alignment = TextAlign.right),
                 ),
               ],
             ),
@@ -211,7 +257,9 @@ class _TextEditorDialogState extends State<TextEditorDialog> {
                             'color': _color,
                             'bold': _bold,
                             'italic': _italic,
+                            'underline': _underline,
                             'font': _font,
+                            'alignment': _alignment,
                           })
                       : null,
                   child: Text('Add',
@@ -260,6 +308,7 @@ class _StyleBtn extends StatelessWidget {
   final bool active;
   final bool bold;
   final bool italic;
+  final bool underline;
   final VoidCallback onTap;
 
   const _StyleBtn({
@@ -267,6 +316,7 @@ class _StyleBtn extends StatelessWidget {
     required this.active,
     this.bold = false,
     this.italic = false,
+    this.underline = false,
     required this.onTap,
   });
 
@@ -296,9 +346,50 @@ class _StyleBtn extends StatelessWidget {
               color: active ? const Color(0xFF4FC3F7) : Colors.white54,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
               fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+              decoration: underline ? TextDecoration.underline : null,
+              decorationColor:
+                  active ? const Color(0xFF4FC3F7) : Colors.white54,
               fontSize: 15,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlignBtn extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _AlignBtn({
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFF4FC3F7).withOpacity(0.2)
+              : const Color(0xFF16213E),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? const Color(0xFF4FC3F7) : Colors.white12,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: active ? const Color(0xFF4FC3F7) : Colors.white54,
         ),
       ),
     );
