@@ -137,34 +137,4 @@ jobs:
           path: build/windows/x64/runner/Release/
           retention-days: 30
 
-  # ─── Web Build ───────────────────────────────────────────────────────────────
-  build-web:
-    name: Build Web App
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter 3.22.2
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.2'
-          channel: stable
-          cache: true
-
-      - name: Disable analytics
-        run: flutter config --no-analytics
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build Web release
-        run: flutter build web --release --no-tree-shake-icons
-
-      - name: Upload Web build
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDFEditorPro-Web
-          path: build/web/
-          retention-days: 30
