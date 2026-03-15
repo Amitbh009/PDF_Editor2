@@ -272,7 +272,7 @@ class PdfService {
         for (int i = 0; i < src.pages.count; i++) {
           final srcPage = src.pages[i];
           final newPage = merged.pages.add();
-          newPage.setSize(srcPage.size);
+          newPage.size = srcPage.size;
 
           final template = srcPage.createTemplate();
           newPage.graphics.drawPdfTemplate(template, Offset.zero);
@@ -303,7 +303,7 @@ class PdfService {
         final srcPage = doc.pages[pageIdx];
         final newDoc = sf.PdfDocument();
         final newPage = newDoc.pages.add();
-        newPage.setSize(srcPage.size);
+        newPage.size = srcPage.size;
 
         final template = srcPage.createTemplate();
         newPage.graphics.drawPdfTemplate(template, Offset.zero);
