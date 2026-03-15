@@ -271,8 +271,18 @@ class PdfService {
 
         for (int i = 0; i < src.pages.count; i++) {
           final srcPage = src.pages[i];
-          final settings = sf.PdfPageSettings(srcPage.size);
-          final newPage = merged.pages.add(settings: settings);
+          
+          // Create a section with the appropriate page settings
+          final section = merged.sections?.add();
+          if (section == null) {
+            _toast('Failed to create PDF section during merge operation.');
+            src.dispose();
+            merged.dispose();
+            return null;
+          }
+          
+          section.pageSettings.size = srcPage.size;
+          final newPage = section.pages.add();
 
           final template = srcPage.createTemplate();
           newPage.graphics.drawPdfTemplate(template, Offset.zero);
@@ -302,8 +312,17 @@ class PdfService {
 
         final srcPage = doc.pages[pageIdx];
         final newDoc = sf.PdfDocument();
-        final settings = sf.PdfPageSettings(srcPage.size);
-        final newPage = newDoc.pages.add(settings: settings);
+        
+        // Create a section with the appropriate page settings
+        final section = newDoc.sections?.add();
+        if (section == null) {
+          _toast('Failed to create PDF section during split operation.');
+          newDoc.dispose();
+          continue;
+        }
+        
+        section.pageSettings.size = srcPage.size;
+        final newPage = section.pages.add();
 
         final template = srcPage.createTemplate();
         newPage.graphics.drawPdfTemplate(template, Offset.zero);

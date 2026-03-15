@@ -21,7 +21,52 @@ A full-featured PDF editor built with Flutter — runs on **Android (APK)** and 
 
 ---
 
-## 📦 Prerequisites
+## 📥 Download Pre-built Releases
+
+### GitHub Actions Builds
+
+Every push to the main branch automatically builds:
+- **Android APKs** (arm64-v8a, armeabi-v7a, x86_64)
+- **Windows EXE** (with all dependencies)
+- **Windows ZIP** (portable version)
+
+**To download:**
+1. Go to the [Actions tab](../../actions)
+2. Click on the latest successful build
+3. Scroll to "Artifacts" section
+4. Download your preferred package:
+
+#### Available Artifacts:
+
+| Artifact Name | Contents | Size | Use For |
+|---|---|---|---|
+| **PDFEditorPro-Android-APKs** | 3 .apk files (arm64, armeabi, x86_64) | ~31 MB | Android devices |
+| **PDFEditorPro-Windows-ZIP** | PDFEditorPro.exe + DLLs in single .zip | ~16 MB | Windows (portable) |
+| **PDFEditorPro-Windows-Portable** | Complete folder structure | ~16 MB | Windows (extract & run) |
+
+### Installation:
+
+**Android:**
+1. Download `PDFEditorPro-Android-APKs`
+2. Extract the ZIP to get 3 .apk files
+3. Install the one that matches your device:
+   - Most phones: `PDFEditorPro-Android-arm64-v8a.apk`
+   - Older phones: `PDFEditorPro-Android-armeabi-v7a.apk`
+   - Emulators: `PDFEditorPro-Android-x86_64.apk`
+
+**Windows:**
+1. Download either `PDFEditorPro-Windows-ZIP` or `PDFEditorPro-Windows-Portable`
+2. Extract the contents
+3. Run `PDFEditorPro.exe`
+4. No installation required - it's portable!
+
+---
+
+## 🛠️ Build from Source
+
+If you prefer to build from source instead of downloading pre-built releases:
+
+### Prerequisites
 
 Install the following **before** anything else:
 
