@@ -18,16 +18,23 @@ jobs:
         with:
           flutter-version: "3.22.0"
 
-      # 🔧 Fix android/app/build.gradle if shrinkResources is true without minifyEnabled
-      - name: Patch build.gradle for release build
+      # 🔧 Robust patch for android/app/build.gradle
+      - name: Patch build.gradle to fix shrinkResources error
         run: |
           FILE="android/app/build.gradle"
-          if grep -q "shrinkResources true" "$FILE" && ! grep -q "minifyEnabled true" "$FILE"; then
-            echo "⚠️  Found shrinkResources true without minifyEnabled. Adding minifyEnabled true..."
-            sed -i '/shrinkResources true/ i \            minifyEnabled true' "$FILE"
+          if grep -q "shrinkResources true" "$FILE"; then
+            echo "🔍 Found shrinkResources true. Ensuring minifyEnabled true is present..."
+            
+            # Remove any existing minifyEnabled lines (including commented ones) to avoid duplication
+            sed -i '/minifyEnabled/d' "$FILE"
+            
+            # Find the line with shrinkResources true, capture its indentation, and insert minifyEnabled true before it
+            # This uses sed with a capture group and backreference
+            sed -i 's/^\(\s*\)shrinkResources true/\1minifyEnabled true\n\1shrinkResources true/' "$FILE"
+            
             echo "✅ Patched $FILE"
           else
-            echo "✅ No patch needed."
+            echo "✅ No shrinkResources true found, no patch needed."
           fi
 
       - run: flutter pub get
