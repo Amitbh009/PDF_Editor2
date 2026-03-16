@@ -297,9 +297,9 @@ class PdfService {
 
         for (int i = 0; i < src.pages.count; i++) {
           final srcPage = src.pages[i];
-          final settings = sf.PdfPageSettings(srcPage.size);
-          // FIX: Removed named parameter, pass settings positionally
-          final newPage = merged.pages.add(settings);
+          // Add blank page, then set its size to match the source page
+          final newPage = merged.pages.add();
+          newPage.size = srcPage.size;
 
           final template = srcPage.createTemplate();
           newPage.graphics.drawPdfTemplate(template, Offset.zero);
@@ -329,9 +329,9 @@ class PdfService {
 
         final srcPage = doc.pages[pageIdx];
         final newDoc = sf.PdfDocument();
-        final settings = sf.PdfPageSettings(srcPage.size);
-        // FIX: Removed named parameter, pass settings positionally
-        final newPage = newDoc.pages.add(settings);
+        // Add blank page, then set its size to match the source page
+        final newPage = newDoc.pages.add();
+        newPage.size = srcPage.size;
 
         final template = srcPage.createTemplate();
         newPage.graphics.drawPdfTemplate(template, Offset.zero);
