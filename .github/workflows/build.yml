@@ -1,30 +1,111 @@
-name: Flutter Build
+name: Flutter Release Pipeline
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - "v*"
 
 jobs:
-  build:
+
+  build-android:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
 
-      - name: Install Dependencies
-        run: flutter pub get
+      - run: flutter pub get
 
-      - name: Build Android APK
+      - name: Build APK
         run: flutter build apk --release
 
-      - name: Upload APK Artifact
+      - name: Build App Bundle
+        run: flutter build appbundle --release
+
+      - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-editor-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: android-build
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.0"
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - run: flutter pub get
+
+      - name: Build Windows App
+        run: flutter build windows --release
+
+      # Create a minimal Inno Setup script on the fly
+      - name: Create Inno Setup Script
+        run: |
+          New-Item -ItemType Directory -Force -Path installer
+          @"
+          [Setup]
+          AppName=PDF Editor Pro
+          AppVersion=1.0.0
+          DefaultDirName={autopf}\PDF Editor Pro
+          OutputBaseFilename=PDFEditorProSetup
+          OutputDir=..\installer_output
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs
+
+          [Icons]
+          Name: "{group}\PDF Editor Pro"; Filename: "{app}\pdf_editor_pro.exe"
+          "@ | Out-File -FilePath installer/setup.iss -Encoding ASCII
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Create Installer
+        run: |
+          iscc installer/setup.iss
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: installer_output/*.exe
+
+  release:
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-build
+          path: release/
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: release/windows/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/app-release.apk
+            release/app-release.aab
+            release/windows/*.exe
