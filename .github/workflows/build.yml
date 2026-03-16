@@ -18,6 +18,18 @@ jobs:
         with:
           flutter-version: "3.22.0"
 
+      # 🔧 Fix android/app/build.gradle if shrinkResources is true without minifyEnabled
+      - name: Patch build.gradle for release build
+        run: |
+          FILE="android/app/build.gradle"
+          if grep -q "shrinkResources true" "$FILE" && ! grep -q "minifyEnabled true" "$FILE"; then
+            echo "⚠️  Found shrinkResources true without minifyEnabled. Adding minifyEnabled true..."
+            sed -i '/shrinkResources true/ i \            minifyEnabled true' "$FILE"
+            echo "✅ Patched $FILE"
+          else
+            echo "✅ No patch needed."
+          fi
+
       - run: flutter pub get
 
       - name: Build APK
@@ -55,6 +67,7 @@ jobs:
 
       # Create a minimal Inno Setup script on the fly
       - name: Create Inno Setup Script
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path installer
           @"
