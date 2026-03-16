@@ -1,131 +1,145 @@
-name: Flutter Release Pipeline
+name: Flutter Production Build & Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
 
+  # ─────────────────────────────────────────────
+  # Job 1: Build Android APK + App Bundle
+  # ─────────────────────────────────────────────
   build-android:
+    name: "Android – APK & AAB"
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.0"
+          flutter-version: "3.22.2"
+          channel: stable
+          cache: true
 
-      # 🔧 Robust patch for android/app/build.gradle
-      - name: Patch build.gradle to fix shrinkResources error
-        run: |
-          FILE="android/app/build.gradle"
-          if grep -q "shrinkResources true" "$FILE"; then
-            echo "🔍 Found shrinkResources true. Ensuring minifyEnabled true is present..."
-            
-            # Remove any existing minifyEnabled lines (including commented ones) to avoid duplication
-            sed -i '/minifyEnabled/d' "$FILE"
-            
-            # Find the line with shrinkResources true, capture its indentation, and insert minifyEnabled true before it
-            # This uses sed with a capture group and backreference
-            sed -i 's/^\(\s*\)shrinkResources true/\1minifyEnabled true\n\1shrinkResources true/' "$FILE"
-            
-            echo "✅ Patched $FILE"
-          else
-            echo "✅ No shrinkResources true found, no patch needed."
-          fi
+      - name: Install dependencies
+        run: flutter pub get
 
-      - run: flutter pub get
-
-      - name: Build APK
+      - name: Build APK (release)
         run: flutter build apk --release
 
-      - name: Build App Bundle
+      - name: Build App Bundle (release)
         run: flutter build appbundle --release
 
-      - name: Upload Android Artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-build
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
 
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # Job 2: Build Windows EXE Installer
+  # ─────────────────────────────────────────────
   build-windows:
+    name: "Windows – EXE Installer"
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.0"
+          flutter-version: "3.22.2"
+          channel: stable
+          cache: true
 
-      - name: Enable Windows Desktop
+      - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - run: flutter pub get
+      - name: Install dependencies
+        run: flutter pub get
 
-      - name: Build Windows App
+      - name: Build Windows release
         run: flutter build windows --release
 
-      # Create a minimal Inno Setup script on the fly
-      - name: Create Inno Setup Script
+      - name: Prepare installer output directory
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path installer
-          @"
-          [Setup]
-          AppName=PDF Editor Pro
-          AppVersion=1.0.0
-          DefaultDirName={autopf}\PDF Editor Pro
-          OutputBaseFilename=PDFEditorProSetup
-          OutputDir=..\installer_output
-
-          [Files]
-          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs
-
-          [Icons]
-          Name: "{group}\PDF Editor Pro"; Filename: "{app}\pdf_editor_pro.exe"
-          "@ | Out-File -FilePath installer/setup.iss -Encoding ASCII
+        run: New-Item -ItemType Directory -Force -Path installer_output | Out-Null
 
       - name: Install Inno Setup
         run: choco install innosetup -y
 
-      - name: Create Installer
-        run: |
-          iscc installer/setup.iss
+      - name: Compile installer
+        run: iscc installer/setup.iss
 
-      - name: Upload Windows Artifacts
+      - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: installer_output/*.exe
+          name: windows-installer
+          path: installer_output/PDFEditorProSetup.exe
+          retention-days: 7
 
+  # ─────────────────────────────────────────────
+  # Job 3: Publish GitHub Release (tags only)
+  # ─────────────────────────────────────────────
   release:
+    name: "GitHub Release"
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-android, build-windows]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Android Artifact
+      - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: android-build
+          name: android-apk
           path: release/
 
-      - name: Download Windows Artifact
+      - name: Download AAB artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-build
-          path: release/windows/
+          name: android-aab
+          path: release/
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
           files: |
             release/app-release.apk
             release/app-release.aab
-            release/windows/*.exe
+            release/PDFEditorProSetup.exe
